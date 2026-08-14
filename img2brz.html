@@ -178,11 +178,11 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
         <input type="range" id="alpha" min="0" max="255" value="128">
       </div>
       <div class="row">
-        <label for="tol">Merge nearby colours <span class="hint" id="tolOut">1.0</span></label>
+        <label for="tol">Merge nearby colors <span class="hint" id="tolOut">1.0</span></label>
         <input type="range" id="tol" min="0" max="5" step="0.1" value="1">
       </div>
       <div class="row">
-        <label for="hex4">Short colour tags <span class="hint">4 bits per channel, 3 chars shorter</span></label>
+        <label for="hex4">Short color tags <span class="hint">4 bits per channel, 3 chars shorter</span></label>
         <input type="checkbox" id="hex4">
       </div>
     </div>
@@ -194,10 +194,11 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
         <dt>Size in studs</dt><dd id="sStuds">-</dd>
         <dt>Text bricks</dt><dd id="sBricks">-</dd>
         <dt>Characters</dt><dd id="sChars">-</dd>
-        <dt>Colour tags</dt><dd id="sTags">-</dd>
+        <dt>Color tags</dt><dd id="sTags">-</dd>
         <dt id="sSideLabel">Bricks outside picture boundary</dt><dd id="sSide">-</dd>
       </dl>
       <div id="msg"></div>
+      <div id="msgScale"></div>
       <div style="margin-top:12px"><button class="primary" id="save" disabled>Save .brz</button></div>
     </div>
 
@@ -269,8 +270,8 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
     <h2>How it works</h2>
     <p>Width and height set how big the picture is drawn, not how many pixels it has: they change the text size and leave the resolution alone. Pixels per stud is the resampling control, and Reset puts it back to one output pixel per source pixel at the current width.</p>
     <p>Text reads along world -X and stacks up +Z, so the picture hangs in the XZ plane on one Y. Anchors sit at the left edge of the row their text starts on, which keeps both offsets near zero, and they never leave the picture's own rectangle: bottom rows are pulled up, crowded ones look for the nearest free 2cm slot, and every one of them carries the offset that puts its text back where it belongs. If a picture is too small to hold one micro per component they spill out, and the Output panel says how many.</p>
-    <p>Merging nudges each pixel onto its neighbours' colour where the shift stays under the tolerance, in reading order and wrapping across rows exactly as the colour tag does, which turns scattered near-identical pixels into one long run and one tag. The run re-centres itself on everything it has swallowed rather than sticking with the colour it opened on, and nothing is ever moved further than the tolerance: 1 is around four steps of 8-bit grey and is hard to see, while 2 flattens film grain and faint texture. On a noisy photograph it typically cuts the character count by half or more.</p>
-    <p>Bricks sit on whole centimetres, so a picture whose size is not a whole number of them cannot be boxed exactly. Its top left corner is pinned to the grid and the leftover sliver, always under one centimetre, is left at the bottom right. The red brick starts in that corner, grows upward until something stops it, and if only the top edge did, grows leftward as well, so it ends up filling everything the anchors are not using.</p>
+    <p>Merging nudges each pixel onto its neighbors' color where the shift stays under the tolerance, in reading order and wrapping across rows exactly as the color tag does, which turns scattered near-identical pixels into one long run and one tag. The run re-centers itself on everything it has swallowed rather than sticking with the color it opened on, and nothing is ever moved further than the tolerance: 1 is around four steps of 8-bit gray and is hard to see, while 2 flattens film grain and faint texture. On a noisy photograph it typically cuts the character count by half or more.</p>
+    <p>Bricks sit on whole centimeters, so a picture whose size is not a whole number of them cannot be boxed exactly. Its top left corner is pinned to the grid and the leftover sliver, always under one centimeter, is left at the bottom right. The red brick starts in that corner, grows upward until something stops it, and if only the top edge did, grows leftward as well, so it ends up filling everything the anchors are not using.</p>
   </div>
 </main>
 
@@ -295,7 +296,7 @@ function hex3(r, g, b) {
    tracks perception well enough for nudges this small, and it costs three
    cube roots rather than the trigonometry CIEDE2000 wants: about four times
    faster, which matters when every pixel is measured. Distances are reported
-   times 100, so 1 is around four steps of 8-bit grey. */
+   times 100, so 1 is around four steps of 8-bit gray. */
 const SRGB_LIN = new Float64Array(256);
 for (let i = 0; i < 256; i++) {
   const c = i / 255;
@@ -311,30 +312,30 @@ function oklab(r, g, b, o) {
   o[2] = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
   return o;
 }
-/* Linear light back to a byte. This runs on every colour a run considers, so
+/* Linear light back to a byte. This runs on every color a run considers, so
    it is a table rather than three pow calls; the result is rounded to a byte
    either way, and the fit check downstream measures the byte that comes out,
-   so the table can only change which colour is picked, never the bound. */
+   so the table can only change which color is picked, never the bound. */
 const LIN_BYTE = new Uint8Array(4097);
 for (let i = 0; i <= 4096; i++) {
   const c = i / 4096;
   const v = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
   LIN_BYTE[i] = Math.max(0, Math.min(255, Math.round(v * 255)));
 }
-/* Nearest 12-bit colour, judged in OKLab rather than by rounding each channel.
+/* Nearest 12-bit color, judged in OKLab rather than by rounding each channel.
    Rounding each channel is optimal per channel but cannot trade error between
-   them, and that trade is the whole gain: over random colours it drops the
+   them, and that trade is the whole gain: over random colors it drops the
    worst error from 6.05 to 4.36 and the mean from 1.41 to 1.36, while the best
    possible per-channel table matches plain rounding exactly. Searching one
-   cell each way is enough; two helps 2% of colours by a mean of 0.03.
+   cell each way is enough; two helps 2% of colors by a mean of 0.03.
 
-   The table of the 4096 available colours is built on first use, and results
-   are memoised, since the same source colours recur constantly. */
+   The table of the 4096 available colors is built on first use, and results
+   are memoized, since the same source colors recur constantly. */
 let LAB4 = null, SNAP_KEY = null, SNAP_VAL = null;
 function build4() {
   LAB4 = new Float64Array(4096 * 3);
   // direct-mapped cache, one slot per key hash: a Map costs more in both
-  // lookup and rubbish once a photograph pushes a million colours through it
+  // lookup and garbage once a photograph pushes a million colors through it
   SNAP_KEY = new Int32Array(1 << 20).fill(-1);
   SNAP_VAL = new Int32Array(1 << 20);
   const t = [0, 0, 0];
@@ -346,7 +347,7 @@ function build4() {
 }
 const PIX4 = [0, 0, 0];
 
-/* Nearest 12-bit colour to a target already in OKLab, searching the cell
+/* Nearest 12-bit color to a target already in OKLab, searching the cell
    around the rgb given. Callers that hold the target's OKLab pass it in and
    save the conversion. */
 const PAINT_LAB = [0, 0, 0];   // OKLab of whatever oklabToRgb last returned
@@ -401,20 +402,20 @@ function oklabToRgb(L, A, B, short, o) {
   return o;
 }
 
-/* Read RGBA bytes into per-pixel colour tags, and merge neighbours into runs
-   of one colour while doing it.
+/* Read RGBA bytes into per-pixel color tags, and merge neighbors into runs
+   of one color while doing it.
 
    A run is a stretch of the reading order, wrapping across rows exactly the
-   way the colour tag does, and it paints one colour. A pixel joins if the
-   colour the run would then paint stays within `tolerance` of every colour
+   way the color tag does, and it paints one color. A pixel joins if the
+   color the run would then paint stays within `tolerance` of every color
    already in it, so no pixel is ever moved further than the tolerance and the
    run keeps re-centring itself as it goes, which fits gradients far better
-   than sticking with the colour it opened on.
+   than sticking with the color it opened on.
 
    The membership test uses the corners of the run's OKLab bounding box: every
    member sits inside that box, so bounding the corners bounds the members.
    Transparent pixels neither join nor break a run, since they draw nothing
-   and the colour tag carries across them. Trailing transparent pixels on a
+   and the color tag carries across them. Trailing transparent pixels on a
    row are dropped: they cost characters and change nothing. */
 function readCells(data, w, h, alphaThreshold, short, tolerance) {
   const hex = short ? hex3 : hex6;
@@ -442,7 +443,7 @@ function readCells(data, w, h, alphaThreshold, short, tolerance) {
     open = false;
   };
 
-  /* The colour a run covering this box would paint, and how far that colour
+  /* The color a run covering this box would paint, and how far that color
      sits from the furthest corner. */
   const fit = (blo, bhi, out) => {
     oklabToRgb((blo[0] + bhi[0]) / 2, (blo[1] + bhi[1]) / 2, (blo[2] + bhi[2]) / 2, short, out);
@@ -480,7 +481,7 @@ function readCells(data, w, h, alphaThreshold, short, tolerance) {
             nhi[k] = pix[k] > hi[k] ? pix[k] : hi[k];
             const e = nhi[k] - nlo[k]; dx += e * e;
           }
-          // no colour can beat half the box diagonal, so reject hopeless
+          // no color can beat half the box diagonal, so reject hopeless
           // boxes before paying for the inverse transform
           if (Math.sqrt(dx) / 2 > T) ok = false;
           if (ok && fit(nlo, nhi, cand) <= T) {
@@ -505,9 +506,9 @@ function readCells(data, w, h, alphaThreshold, short, tolerance) {
   return { cells, rowEnd, shown, runs };
 }
 
-/* Greedy pack into components. A colour tag and the pixel it applies to are
+/* Greedy pack into components. A color tag and the pixel it applies to are
    one indivisible unit, so a split never lands inside a tag or orphans one.
-   Colour is sticky within a component and resets at every boundary. */
+   Color is sticky within a component and resets at every boundary. */
 function encode(cells, rowEnd, w, h, limit, short) {
   const tagLen = short ? 13 : 16;             // <color="rgb"> or <color="rrggbb">
   const worst = tagLen + 1;
@@ -518,11 +519,11 @@ function encode(cells, rowEnd, w, h, limit, short) {
     if (col + worst > limit) {
       throw new Error(
         "A single row needs more characters than one component holds. " +
-        "At " + tagLen + " characters per colour tag the widest workable image is " +
+        "At " + tagLen + " characters per color tag the widest workable image is " +
         (limit - worst) + " pixels; this one is " + w + ". Lower pixels per stud to resample it smaller."
       );
     }
-    ch = { startRow: row, startCol: col, endRow: row, endCol: col, parts: [], len: 0, colour: null };
+    ch = { startRow: row, startCol: col, endRow: row, endCol: col, parts: [], len: 0, color: null };
     if (col > 0) { ch.parts.push(EM.repeat(col)); ch.len = col; }
     chunks.push(ch);
     return ch;
@@ -543,12 +544,12 @@ function encode(cells, rowEnd, w, h, limit, short) {
       const c = row[x];
       let piece, cost;
       if (c === null) { piece = EM; cost = 1; }
-      else if (c === ch.colour) { piece = BLOCK; cost = 1; }
+      else if (c === ch.color) { piece = BLOCK; cost = 1; }
       else { piece = '<color="' + c + '">' + BLOCK; cost = tagLen + 1; }
       if (ch.len + cost > limit) { open(y, x); freshRow = true; continue; }
       ch.parts.push(piece);
       ch.len += cost;
-      if (c !== null) ch.colour = c;
+      if (c !== null) ch.color = c;
       x++;
     }
     ch.endRow = y; ch.endCol = end;
@@ -560,7 +561,7 @@ function encode(cells, rowEnd, w, h, limit, short) {
 }
 
 /* Text right runs along world -X, up along world +Z. */
-const VERSION = "1.4.9";
+const VERSION = "1.4.12";
 const RIGHT_X = -1;
 
 /* The client that wrote the reference clipboards. Cosmetic, but brs-js's
@@ -578,16 +579,16 @@ const GAME_VERSION = "CL15526";
    In-plane coordinates: u runs right along the text, v runs up. */
 function planAnchors(chunks, opts) {
   const { w, h, px, baseX, baseY, planeY, stepMode } = opts;
-  /* Bricks live on whole centimetres, so a picture whose size is not a whole
+  /* Bricks live on whole centimeters, so a picture whose size is not a whole
      number of them cannot be covered exactly. Pin its top left corner to the
      grid, which puts the leftover sliver at the bottom right, next to the
      corner marker, rather than under the anchors. */
   const u0 = -Math.ceil(w * px), v0 = Math.ceil(h * px);
 
-  // a micro is 2cm across, so its centre has to keep one cm clear of each edge
+  // a micro is 2cm across, so its center has to keep one cm clear of each edge
   const uLo = u0 + MICRO_HALF, uHi = u0 + w * px - MICRO_HALF;
   const vLo = v0 - h * px + MICRO_HALF, vHi = v0 - MICRO_HALF;
-  const xLo = -uHi, xHi = -uLo;                       // world X of the centre
+  const xLo = -uHi, xHi = -uLo;                       // world X of the center
   const box = {
     xMin: Math.ceil(xLo - 1e-9), xMax: Math.floor(xHi + 1e-9),
     zMin: Math.ceil(vLo - 1e-9), zMax: Math.floor(vHi + 1e-9),
@@ -634,7 +635,7 @@ function planAnchors(chunks, opts) {
      -Z, so the bottom right corner is the smallest of both. It starts as one
      micro and grows upward as far as it can, and if nothing but the top edge
      stopped it, it then grows leftward too. Growth is in 2cm steps to keep
-     the centre and half extents whole. Skipped when the picture has no room
+     the center and half extents whole. Skipped when the picture has no room
      for it or an anchor already sits there. */
   let corner = null;
   if (roomy && free(taken, box.xMin, box.zMin)) {
@@ -706,7 +707,7 @@ function findSpot(taken, x, z, box, along, across) {
   }
 }
 
-/* Micros are 2cm cubes, so two of them clash whenever their centres are
+/* Micros are 2cm cubes, so two of them clash whenever their centers are
    within 2cm on both in-plane axes, not just when they share a cell. */
 function free(taken, x, z) {
   for (let dx = -1; dx <= 1; dx++) {
@@ -819,12 +820,12 @@ function buildSave(anchors, opts) {
    draw, so this does the same.
 
    The pivot is read in the frame you get after adding addedGlobalGridOffset,
-   and every prefab the game writes centres that frame on the bounds: the
-   offset is minus the centre of the brick box, leaving the pivot centre at
-   the origin. Writing a zero offset and a pivot sitting out at the box centre
+   and every prefab the game writes centers that frame on the bounds: the
+   offset is minus the center of the brick box, leaving the pivot center at
+   the origin. Writing a zero offset and a pivot sitting out at the box center
    describes the same geometry but the game does not place it correctly, so
-   match what the game writes. Brick coordinates are whole centimetres, so a
-   box with an odd span leaves half a centimetre in the pivot centre. */
+   match what the game writes. Brick coordinates are whole centimeters, so a
+   box with an odd span leaves half a centimeter in the pivot center. */
 function makePrefab(bricks) {
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (const b of bricks) {
@@ -988,7 +989,7 @@ $("clear").addEventListener("click", () => {
   $("stage").classList.remove("on");
   $("drop").style.display = "flex";
   $("save").disabled = true;
-  setMessage("", "");
+  setMessage("", ""); note("msgScale", "");
   ["sRes", "sStuds", "sBricks", "sChars", "sTags", "sSide"].forEach(id => $(id).textContent = "-");
   showStrays(false);
 });
@@ -1038,11 +1039,12 @@ function stats() {
   $("sRes").textContent = state.w + " x " + state.h + " px";
   $("sStuds").textContent = fmt(state.w / o.pixelsPerStud) + " x " + fmt(state.h / o.pixelsPerStud) + " studs";
   if (!r) { ["sBricks", "sChars", "sTags", "sSide"].forEach(id => $(id).textContent = "-");
-    showStrays(false); $("save").disabled = true; return; }
+    showStrays(false); note("msgScale", ""); $("save").disabled = true; return; }
   const total = r.chunks.reduce((a, c) => a + c.len, 0);
   $("sBricks").textContent = r.chunks.length.toLocaleString();
   $("sChars").textContent = total.toLocaleString();
   $("sTags").textContent = r.runs.toLocaleString();
+  checkTextSize(r, o);
   $("sSide").textContent = r.outside;
   showStrays(r.outside > 0);
   $("save").disabled = false;
@@ -1054,11 +1056,24 @@ function showStrays(on) {
   $("sSide").style.display = d; $("sSideLabel").style.display = d;
 }
 
-function setMessage(text, kind) {
-  const box = $("msg");
+function setMessage(text, kind) { note("msg", text, kind); }
+function note(id, text, kind) {
+  const box = $(id);
   if (!text) { box.innerHTML = ""; return; }
   box.innerHTML = '<div class="note ' + (kind || "") + '"></div>';
   box.firstChild.textContent = text;
+}
+
+/* Under a tenth of a centimetre the game draws the text fine, but deleting a
+   brick and undoing it leaves the display broken, so say so. */
+const MIN_TEXT_CM = 0.1;
+function checkTextSize(r, o) {
+  const size = o.lineHeight * r.scale;
+  note("msgScale", size < MIN_TEXT_CM
+    ? "Text size is " + (Math.round(size * 10000) / 10000) + "cm, under the " + MIN_TEXT_CM +
+      "cm the game handles reliably. It draws correctly, but deleting a brick and undoing that " +
+      "breaks the display. Lower pixels per stud, or make the picture bigger."
+    : "", "warn");
 }
 
 /* ---- preview */
@@ -1073,7 +1088,7 @@ function paint() {
   src.width = w; src.height = h;
   const sctx = src.getContext("2d");
   const img = sctx.createImageData(w, h);
-  // exactly the colours the components will paint, merges and all
+  // exactly the colors the components will paint, merges and all
   if (state.result) img.data.set(state.result.shown);
   else {
     const thr = +$("alpha").value;
@@ -1145,14 +1160,15 @@ $("hStuds").addEventListener("input", () => {
 }));
 $("lockAspect").addEventListener("change", () => { if (state.bitmap) { showStuds(); run(); } });
 
-$("pps").addEventListener("input", () => {
+function applyPps() {
   const v = parseFloat($("pps").value), w = studsIn("wStuds"), h = studsIn("hStuds");
   if (!Number.isFinite(v) || v <= 0 || w === null || h === null) return;
   setPps(v);
   state.resW = Math.max(1, Math.round(w * state.pps));
   state.resH = Math.max(1, Math.round(h * state.pps));
   run();
-});
+}
+$("pps").addEventListener("input", applyPps);
 $("ppsReset").addEventListener("click", () => {
   if (!state.bitmap) return;
   const w = studsIn("wStuds") || state.resW / state.pps;
@@ -1190,6 +1206,7 @@ function wheelable(id, after, grain) {
 }
 wheelable("alpha", showAlpha, 16);
 wheelable("tol", showTol);
+wheelable("pps", applyPps, 1);
 ["smooth", "hex4", "limit", "stepMode", "baseX", "baseY", "lineHeight", "lineOffset", "kerning",
  "material", "slider", "font", "showAnchors"].forEach(id => {
   $(id).addEventListener("input", run);
