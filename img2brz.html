@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>img2brz - image to Brickadia text display</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/brs-js@3.7.3/dist/dist.js"></script>
+<style>
+:root{
+  --paper:#e8e9e3; --panel:#f7f7f3; --ink:#191d1b; --muted:#69716d;
+  --line:#c7cbc1; --line2:#dfe2d9; --accent:#0f7d74; --accent-soft:#d7ebe8;
+  --warn:#a8560f; --warn-soft:#f6e6d2; --bad:#a32b1c;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --disp:"Space Grotesk",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--paper); color:var(--ink); font-family:var(--mono);
+  font-size:13px; line-height:1.5;
+  background-image:radial-gradient(var(--line2) 1px, transparent 1px);
+  background-size:10px 10px; background-position:-1px -1px;
+}
+a{color:var(--accent)}
+header{
+  border-bottom:2px solid var(--ink); background:var(--paper);
+  padding:18px 22px 14px; display:flex; align-items:baseline; gap:16px; flex-wrap:wrap;
+}
+h1{font-family:var(--disp); font-weight:700; font-size:22px; margin:0; letter-spacing:-.02em}
+h1 span{color:var(--accent)}
+.brand{display:flex; flex-direction:column; gap:1px}
+.ver{font-size:10px; letter-spacing:.14em; color:var(--muted)}
+header p{margin:0; color:var(--muted); max-width:62ch}
+main{display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:22px; padding:22px; align-items:start}
+@media (max-width:940px){ main{grid-template-columns:minmax(0,1fr)} }
+.panel{background:var(--panel); border:1px solid var(--line); padding:14px}
+.panel + .panel{margin-top:16px}
+.panel h2{
+  font-family:var(--disp); font-size:11px; font-weight:700; letter-spacing:.14em;
+  text-transform:uppercase; margin:0 0 10px; color:var(--muted);
+  border-bottom:1px solid var(--line2); padding-bottom:7px;
+}
+#drop{
+  border:2px dashed var(--line); background:
+    repeating-conic-gradient(#00000008 0% 25%, transparent 0% 50%) 0 0/16px 16px, var(--panel);
+  min-height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:10px; text-align:center; padding:26px; cursor:pointer; color:var(--muted);
+}
+#drop.hot{border-color:var(--accent); background-color:var(--accent-soft); color:var(--ink)}
+#drop strong{font-family:var(--disp); font-size:16px; color:var(--ink); display:block}
+#stage{display:none}
+#stage.on{display:block}
+.canvaswrap{
+  position:relative; overflow:auto; max-height:60vh; border:1px solid var(--line);
+  background:repeating-conic-gradient(#00000010 0% 25%, transparent 0% 50%) 0 0/12px 12px, #fff;
+}
+canvas{display:block; image-rendering:pixelated; margin:0 auto}
+.bar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px}
+button,.filebtn{
+  font-family:var(--mono); font-size:12px; font-weight:600; padding:7px 12px;
+  border:1px solid var(--ink); background:var(--panel); color:var(--ink); cursor:pointer;
+}
+button:hover,.filebtn:hover{background:var(--accent-soft)}
+button:focus-visible,.filebtn:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+button.primary{background:var(--accent); border-color:var(--accent); color:#fff; padding:10px 16px; font-size:13px; width:100%}
+button.primary:hover{background:#0b625b}
+button.primary:disabled{background:var(--line); border-color:var(--line); color:var(--muted); cursor:not-allowed}
+button.ghost{border-color:var(--line)}
+.row{display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; margin:7px 0}
+.row label{color:var(--ink)}
+.row .hint{color:var(--muted); font-size:11px; display:block}
+input[type=number],input[type=text],select{
+  font-family:var(--mono); font-size:12px; padding:5px 7px; border:1px solid var(--line);
+  background:#fff; color:var(--ink); width:110px;
+}
+input[type=text].wide{width:180px}
+input[type=range]{width:120px; accent-color:var(--accent)}
+input[type=checkbox]{accent-color:var(--accent); width:15px; height:15px}
+.seg{display:inline-flex; border:1px solid var(--line)}
+.seg button{border:0; padding:5px 10px; background:#fff}
+.seg button[aria-pressed=true]{background:var(--ink); color:#fff}
+dl.stats{display:grid; grid-template-columns:auto 1fr; gap:3px 14px; margin:0}
+dl.stats dt{color:var(--muted)}
+dl.stats dd{margin:0; text-align:right; font-variant-numeric:tabular-nums; font-weight:500}
+dl.stats dd b{font-weight:600}
+.note{border-left:3px solid var(--accent); background:var(--accent-soft); padding:8px 10px; margin-top:10px; font-size:12px}
+.note.warn{border-color:var(--warn); background:var(--warn-soft)}
+.note.bad{border-color:var(--bad); background:#f7dedb}
+details{border-top:1px solid var(--line2); margin-top:12px; padding-top:8px}
+summary{cursor:pointer; font-family:var(--disp); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+#chars{
+  font-family:var(--mono); font-size:9px; line-height:1; white-space:pre; overflow:auto;
+  max-height:300px; background:#12100f; color:#e9e6df; padding:10px; border:1px solid var(--ink);
+  margin-top:8px;
+}
+.legend{display:flex; gap:12px; flex-wrap:wrap; color:var(--muted); font-size:11px; margin-top:8px}
+.swatch{display:inline-block; width:10px; height:10px; vertical-align:-1px; margin-right:4px; border:1px solid #0003}
+.notes p{margin:0 0 10px; max-width:78ch; color:var(--muted)}
+.notes p:last-child{margin-bottom:0}
+kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padding:0 4px}
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">
+    <h1>img2<span>brz</span></h1>
+    <span class="ver" id="ver"></span>
+  </span>
+  <p>Drop an image. Out comes a Brickadia clipboard prefab that draws it as text components.</p>
+</header>
+
+<main>
+  <section>
+    <div class="panel">
+      <h2>Image</h2>
+      <div id="drop" tabindex="0" role="button" aria-label="Choose an image">
+        <strong>Drop an image here</strong>
+        <span>or click to pick one. PNG with alpha gives you transparent pixels.</span>
+      </div>
+      <div id="stage">
+        <div class="canvaswrap"><canvas id="preview"></canvas></div>
+        <div class="bar">
+          <span class="seg" role="group" aria-label="Preview mode">
+            <button id="mPix" aria-pressed="true">Pixels</button>
+            <button id="mChunk" aria-pressed="false">Chunks</button>
+          </span>
+          <button class="ghost" id="zoomOut" aria-label="Zoom out">-</button>
+          <span id="zoomLabel" style="min-width:4ch;text-align:center">1x</span>
+          <button class="ghost" id="zoomIn" aria-label="Zoom in">+</button>
+          <button class="ghost" id="clear">Remove image</button>
+          <span id="fileName" style="color:var(--muted)"></span>
+        </div>
+        <div class="legend" id="legend" hidden>
+          <span><i class="swatch" style="background:#0f7d74"></i>chunk boundary</span>
+          <span><i class="swatch" style="background:#a8560f"></i>anchor micro</span>
+          <span><i class="swatch" style="background:#d02a12"></i>corner marker</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="charPanel" style="display:none">
+      <h2>Character view</h2>
+      <div class="bar">
+        <label for="chunkPick">Chunk</label>
+        <select id="chunkPick"></select>
+        <span id="chunkInfo" style="color:var(--muted)"></span>
+      </div>
+      <div id="chars"></div>
+    </div>
+
+    <div class="panel notes">
+      <h2>How it works</h2>
+      <p>Width and height set how big the picture is drawn, not how many pixels it has: they change the text size and leave the resolution alone. Pixels per stud is the resampling control, and Reset puts it back to one output pixel per source pixel at the current width.</p>
+      <p>Text reads along world -X and stacks up +Z, so the picture hangs in the XZ plane on one Y. Anchors sit at the left edge of the row their text starts on, which keeps both offsets near zero, and they never leave the picture's own rectangle: bottom rows are pulled up, crowded ones look for the nearest free 2cm slot, and every one of them carries the offset that puts its text back where it belongs. If a picture is too small to hold one micro per component they spill out, and the Output panel says how many.</p>
+      <p>Merging nudges each pixel onto its neighbours' colour where the shift stays under the tolerance, in reading order and wrapping across rows exactly as the colour tag does, which turns scattered near-identical pixels into one long run and one tag. The run re-centres itself on everything it has swallowed rather than sticking with the colour it opened on, and nothing is ever moved further than the tolerance: 1 is around four steps of 8-bit grey and is hard to see, while 2 flattens film grain and faint texture. On a noisy photograph it typically cuts the character count by half or more.</p>
+      <p>Bricks sit on whole centimetres, so a picture whose size is not a whole number of them cannot be boxed exactly. Its top left corner is pinned to the grid and the leftover sliver, always under one centimetre, is left at the bottom right beside the corner marker.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="panel">
+      <h2>Size</h2>
+      <div class="row">
+        <label for="wStuds">Width <span class="hint">studs across, resizes the text</span></label>
+        <input type="number" id="wStuds" min="0.2" step="0.2" value="20">
+      </div>
+      <div class="row">
+        <label for="hStuds">Height <span class="hint">studs tall</span></label>
+        <input type="number" id="hStuds" min="0.2" step="0.2" value="20">
+      </div>
+      <div class="row">
+        <label for="lockAspect">Keep aspect ratio</label>
+        <input type="checkbox" id="lockAspect" checked>
+      </div>
+      <div class="row">
+        <label for="pps">Pixels per stud <span class="hint">lower it to resample the image</span></label>
+        <span style="display:flex; gap:6px">
+          <input type="number" id="pps" min="0.05" max="200" step="0.5" value="5" style="width:76px">
+          <button class="ghost" id="ppsReset" title="Back to the image's own resolution">Reset</button>
+        </span>
+      </div>
+      <div class="row">
+        <label for="smooth">Smooth when shrinking</label>
+        <input type="checkbox" id="smooth" checked>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Pixels</h2>
+      <div class="row">
+        <label for="alpha">Transparent below alpha <span class="hint" id="alphaOut">128</span></label>
+        <input type="range" id="alpha" min="0" max="255" value="128">
+      </div>
+      <div class="row">
+        <label for="tol">Merge nearby colours <span class="hint" id="tolOut">1.0</span></label>
+        <input type="range" id="tol" min="0" max="5" step="0.1" value="1">
+      </div>
+      <div class="row">
+        <label for="hex4">Short colour tags <span class="hint">4 bits per channel, 3 chars shorter</span></label>
+        <input type="checkbox" id="hex4">
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Output</h2>
+      <dl class="stats" id="stats">
+        <dt>Resolution</dt><dd id="sRes">-</dd>
+        <dt>Size in studs</dt><dd id="sStuds">-</dd>
+        <dt>Text bricks</dt><dd id="sBricks">-</dd>
+        <dt>Characters</dt><dd id="sChars">-</dd>
+        <dt>Colour tags</dt><dd id="sTags">-</dd>
+        <dt>Fullest chunk</dt><dd id="sMax">-</dd>
+        <dt>Anchors off the picture</dt><dd id="sSide">-</dd>
+      </dl>
+      <div id="msg"></div>
+      <div style="margin-top:12px"><button class="primary" id="save" disabled>Save .brz</button></div>
+    </div>
+
+    <div class="panel">
+      <h2>Component</h2>
+      <div class="row">
+        <label for="material">Material</label>
+        <select id="material">
+          <option value="2" selected>Plastic</option>
+          <option value="0">Unlit</option>
+          <option value="4">Glow</option>
+          <option value="3">Metallic</option>
+          <option value="5">Translucent plastic</option>
+          <option value="6">Glass</option>
+          <option value="1">Graffiti (needs a surface)</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="slider">Material intensity</label>
+        <input type="number" id="slider" min="0" max="10" step="1" value="10">
+      </div>
+      <div class="row">
+        <label for="prefab">Save as paste-able prefab</label>
+        <input type="checkbox" id="prefab" checked>
+      </div>
+      <div class="row">
+        <label for="showAnchors">Leave anchor micros visible <span class="hint">for debugging</span></label>
+        <input type="checkbox" id="showAnchors">
+      </div>
+
+      <details>
+        <summary>Calibration</summary>
+        <div class="row">
+          <label for="font">Font asset</label>
+          <input type="text" class="wide" id="font" value="GlacialIndifferencePlus">
+        </div>
+        <div class="row">
+          <label for="lineHeight">Line height at 1x <span class="hint">scales with pixel size</span></label>
+          <input type="number" id="lineHeight" step="0.00001" value="1.59375">
+        </div>
+        <div class="row">
+          <label for="lineOffset">Line spacing <span class="hint">does not scale</span></label>
+          <input type="number" id="lineOffset" step="0.1" value="-6">
+        </div>
+        <div class="row">
+          <label for="baseY">Base Y offset at 1x <span class="hint">scales with pixel size</span></label>
+          <input type="number" id="baseY" step="0.01" value="-0.23">
+        </div>
+        <div class="row">
+          <label for="baseX">Base X offset <span class="hint">added as-is</span></label>
+          <input type="number" id="baseX" step="0.01" value="0">
+        </div>
+        <div class="row">
+          <label for="kerning">Kerning</label>
+          <input type="number" id="kerning" step="0.01" value="0">
+        </div>
+        <div class="row">
+          <label for="limit">Characters per component</label>
+          <input type="number" id="limit" min="100" max="10000" step="100" value="10000">
+        </div>
+        <div class="row">
+          <label for="stepMode">Crowded anchors step <span class="hint">which way they look for room</span></label>
+          <select id="stepMode" style="width:130px">
+            <option value="right" selected>Right along the row</option>
+            <option value="down">Down the column</option>
+          </select>
+        </div>
+      </details>
+    </div>
+  </section>
+</main>
+
+
+<script>
+// ===== CORE START (no DOM in here; also loaded by the node test) =====
+const EM = "\u2003";      // em space, one transparent pixel
+const BLOCK = "\u2588";   // full block, one opaque pixel
+const BR = "\r";          // the game turns \n into \r\n, so \r alone costs one char
+const MICRO_HALF = 1;     // a 0.2x0.2x0.2 micro is 2cm across, so 1cm each way
+const STUD_CM = 10;
+
+function hex6(r, g, b) {
+  return ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+}
+function hex3(r, g, b) {
+  const q = v => Math.round(v / 17).toString(16);
+  return q(r) + q(g) + q(b);
+}
+
+/* OKLab, for judging how far a pixel is being moved. Euclidean distance in it
+   tracks perception well enough for nudges this small, and it costs three
+   cube roots rather than the trigonometry CIEDE2000 wants: about four times
+   faster, which matters when every pixel is measured. Distances are reported
+   times 100, so 1 is around four steps of 8-bit grey. */
+const SRGB_LIN = new Float64Array(256);
+for (let i = 0; i < 256; i++) {
+  const c = i / 255;
+  SRGB_LIN[i] = c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+function oklab(r, g, b, o) {
+  const R = SRGB_LIN[r], G = SRGB_LIN[g], B = SRGB_LIN[b];
+  const l = Math.cbrt(0.4122214708 * R + 0.5363325363 * G + 0.0514459929 * B);
+  const m = Math.cbrt(0.2119034982 * R + 0.6806995451 * G + 0.1073969566 * B);
+  const s = Math.cbrt(0.0883024619 * R + 0.2817188376 * G + 0.6299787005 * B);
+  o[0] = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+  o[1] = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+  o[2] = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+  return o;
+}
+/* Linear light back to a byte. This runs on every colour a run considers, so
+   it is a table rather than three pow calls; the result is rounded to a byte
+   either way, and the fit check downstream measures the byte that comes out,
+   so the table can only change which colour is picked, never the bound. */
+const LIN_BYTE = new Uint8Array(4097);
+for (let i = 0; i <= 4096; i++) {
+  const c = i / 4096;
+  const v = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
+  LIN_BYTE[i] = Math.max(0, Math.min(255, Math.round(v * 255)));
+}
+function oklabToRgb(L, A, B, short, o) {
+  const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
+  const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
+  const s = (L - 0.0894841775 * A - 1.2914855480 * B) ** 3;
+  const back = c => {
+    const v = LIN_BYTE[c <= 0 ? 0 : c >= 1 ? 4096 : (c * 4096 + 0.5) | 0];
+    return short ? Math.round(v / 17) * 17 : v;
+  };
+  o[0] = back(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s);
+  o[1] = back(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s);
+  o[2] = back(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s);
+  return o;
+}
+
+/* Read RGBA bytes into per-pixel colour tags, and merge neighbours into runs
+   of one colour while doing it.
+
+   A run is a stretch of the reading order, wrapping across rows exactly the
+   way the colour tag does, and it paints one colour. A pixel joins if the
+   colour the run would then paint stays within `tolerance` of every colour
+   already in it, so no pixel is ever moved further than the tolerance and the
+   run keeps re-centring itself as it goes, which fits gradients far better
+   than sticking with the colour it opened on.
+
+   The membership test uses the corners of the run's OKLab bounding box: every
+   member sits inside that box, so bounding the corners bounds the members.
+   Transparent pixels neither join nor break a run, since they draw nothing
+   and the colour tag carries across them. Trailing transparent pixels on a
+   row are dropped: they cost characters and change nothing. */
+function readCells(data, w, h, alphaThreshold, short, tolerance) {
+  const hex = short ? hex3 : hex6;
+  const snap = short ? (v => Math.round(v / 17) * 17) : (v => v);
+  const T = Math.max(0, tolerance || 0) / 100;
+  const cells = new Array(h);
+  for (let y = 0; y < h; y++) cells[y] = new Array(w);
+  const rowEnd = new Int32Array(h);
+  const shown = new Uint8ClampedArray(w * h * 4);
+
+  // scratch, reused for every pixel: allocating here dominated the loop
+  const pix = [0, 0, 0], cand = [0, 0, 0], paintLab = [0, 0, 0];
+  const lo = [0, 0, 0], hi = [0, 0, 0], nlo = [0, 0, 0], nhi = [0, 0, 0], paint = [0, 0, 0];
+  let open = false, tag = null, runStart = 0, lastPacked = -1, runs = 0;
+
+  const commit = end => {
+    if (!open) return;
+    for (let i = runStart; i < end; i++) {
+      if (data[i * 4 + 3] < alphaThreshold) continue;
+      const y = (i / w) | 0;
+      cells[y][i - y * w] = tag;
+      shown[i * 4] = paint[0]; shown[i * 4 + 1] = paint[1];
+      shown[i * 4 + 2] = paint[2]; shown[i * 4 + 3] = 255;
+    }
+    runs++;
+    open = false;
+  };
+
+  /* The colour a run covering this box would paint, and how far that colour
+     sits from the furthest corner. */
+  const fit = (blo, bhi, out) => {
+    oklabToRgb((blo[0] + bhi[0]) / 2, (blo[1] + bhi[1]) / 2, (blo[2] + bhi[2]) / 2, short, out);
+    oklab(out[0], out[1], out[2], paintLab);
+    let worst = 0;
+    for (let k = 0; k < 8; k++) {
+      const a = (k & 1 ? bhi : blo)[0] - paintLab[0];
+      const b = (k & 2 ? bhi : blo)[1] - paintLab[1];
+      const c = (k & 4 ? bhi : blo)[2] - paintLab[2];
+      const d = Math.sqrt(a * a + b * b + c * c);
+      if (d > worst) worst = d;
+    }
+    return worst;
+  };
+
+  for (let y = 0; y < h; y++) {
+    let end = 0;
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x, j = i * 4;
+      if (data[j + 3] < alphaThreshold) { cells[y][x] = null; continue; }
+      end = x + 1;
+      const r = data[j], g = data[j + 1], b = data[j + 2];
+      const packed = (r << 16) | (g << 8) | b;
+      if (open && packed === lastPacked) continue;   // same as the pixel before it
+      lastPacked = packed;
+
+      if (T > 0) {
+        oklab(r, g, b, pix);
+        if (open) {
+          if (pix[0] >= lo[0] && pix[0] <= hi[0] && pix[1] >= lo[1] &&
+              pix[1] <= hi[1] && pix[2] >= lo[2] && pix[2] <= hi[2]) continue;   // nothing changes
+          let dx = 0, ok = true;
+          for (let k = 0; k < 3; k++) {
+            nlo[k] = pix[k] < lo[k] ? pix[k] : lo[k];
+            nhi[k] = pix[k] > hi[k] ? pix[k] : hi[k];
+            const e = nhi[k] - nlo[k]; dx += e * e;
+          }
+          // no colour can beat half the box diagonal, so reject hopeless
+          // boxes before paying for the inverse transform
+          if (Math.sqrt(dx) / 2 > T) ok = false;
+          if (ok && fit(nlo, nhi, cand) <= T) {
+            for (let k = 0; k < 3; k++) { lo[k] = nlo[k]; hi[k] = nhi[k]; paint[k] = cand[k]; }
+            tag = hex(paint[0], paint[1], paint[2]);
+            continue;
+          }
+          commit(i);
+        }
+        for (let k = 0; k < 3; k++) { lo[k] = pix[k]; hi[k] = pix[k]; }
+      } else if (open) commit(i);
+
+      paint[0] = snap(r); paint[1] = snap(g); paint[2] = snap(b);
+      tag = hex(paint[0], paint[1], paint[2]);
+      open = true;
+      runStart = i;
+    }
+    rowEnd[y] = end;
+  }
+  commit(w * h);
+  return { cells, rowEnd, shown, runs };
+}
+
+/* Greedy pack into components. A colour tag and the pixel it applies to are
+   one indivisible unit, so a split never lands inside a tag or orphans one.
+   Colour is sticky within a component and resets at every boundary. */
+function encode(cells, rowEnd, w, h, limit, short) {
+  const tagLen = short ? 13 : 16;             // <color="rgb"> or <color="rrggbb">
+  const worst = tagLen + 1;
+  const chunks = [];
+  let ch = null;
+
+  const open = (row, col) => {
+    if (col + worst > limit) {
+      throw new Error(
+        "A single row needs more characters than one component holds. " +
+        "At " + tagLen + " characters per colour tag the widest workable image is " +
+        (limit - worst) + " pixels; this one is " + w + ". Lower pixels per stud to resample it smaller."
+      );
+    }
+    ch = { startRow: row, startCol: col, endRow: row, endCol: col, parts: [], len: 0, colour: null };
+    if (col > 0) { ch.parts.push(EM.repeat(col)); ch.len = col; }
+    chunks.push(ch);
+    return ch;
+  };
+
+  open(0, 0);
+  let freshRow = true;   // nothing emitted yet for this component, so no leading break
+
+  for (let y = 0; y < h; y++) {
+    if (!freshRow) {
+      if (ch.len + 1 > limit) { open(y, 0); freshRow = true; }
+      else { ch.parts.push(BR); ch.len += 1; }
+    }
+    const row = cells[y];
+    const end = rowEnd[y];
+    let x = 0;
+    while (x < end) {
+      const c = row[x];
+      let piece, cost;
+      if (c === null) { piece = EM; cost = 1; }
+      else if (c === ch.colour) { piece = BLOCK; cost = 1; }
+      else { piece = '<color="' + c + '">' + BLOCK; cost = tagLen + 1; }
+      if (ch.len + cost > limit) { open(y, x); freshRow = true; continue; }
+      ch.parts.push(piece);
+      ch.len += cost;
+      if (c !== null) ch.colour = c;
+      x++;
+    }
+    ch.endRow = y; ch.endCol = end;
+    freshRow = false;
+  }
+
+  for (const c of chunks) { c.text = c.parts.join(""); delete c.parts; }
+  return chunks;
+}
+
+/* Text right runs along world -X, up along world +Z. */
+const VERSION = "1.4.1";
+const RIGHT_X = -1;
+
+/* The client that wrote the reference clipboards. Cosmetic, but brs-js's
+   default of CL0 marks the bundle as coming from nowhere. */
+const GAME_VERSION = "CL15526";
+
+/* One anchor micro per component. It wants to sit exactly where that
+   component's text starts drawing: the left edge of its first row, which
+   makes both offsets zero. If that cell is taken it looks for the nearest
+   free one, and it never leaves the picture's own rectangle, so the bottom
+   rows do not hang a micro out below the image. Wherever it ends up, its
+   offset is measured from there, so the text still lands on the pixel it
+   belongs to.
+
+   In-plane coordinates: u runs right along the text, v runs up. */
+function planAnchors(chunks, opts) {
+  const { w, h, px, baseX, baseY, planeY, stepMode } = opts;
+  /* Bricks live on whole centimetres, so a picture whose size is not a whole
+     number of them cannot be covered exactly. Pin its top left corner to the
+     grid, which puts the leftover sliver at the bottom right, next to the
+     corner marker, rather than under the anchors. */
+  const u0 = -Math.ceil(w * px), v0 = Math.ceil(h * px);
+
+  // a micro is 2cm across, so its centre has to keep one cm clear of each edge
+  const uLo = u0 + MICRO_HALF, uHi = u0 + w * px - MICRO_HALF;
+  const vLo = v0 - h * px + MICRO_HALF, vHi = v0 - MICRO_HALF;
+  const xLo = -uHi, xHi = -uLo;                       // world X of the centre
+  const box = {
+    xMin: Math.ceil(xLo - 1e-9), xMax: Math.floor(xHi + 1e-9),
+    zMin: Math.ceil(vLo - 1e-9), zMax: Math.floor(vHi + 1e-9),
+  };
+  const roomy = box.xMin <= box.xMax && box.zMin <= box.zMax;
+
+  // right is -X, down is -Z; stepping prefers one of them and falls back to the other
+  const along = stepMode === "down" ? { x: 0, z: -1 } : { x: -1, z: 0 };
+  const across = stepMode === "down" ? { x: -1, z: 0 } : { x: 0, z: -1 };
+
+  const taken = new Set();
+  const out = [];
+  let stepped = 0, outside = 0;
+
+  for (const c of chunks) {
+    const xWant = Math.round(-(u0 + MICRO_HALF));
+    const zWant = Math.round(v0 - c.startRow * px - MICRO_HALF);
+    const spot = findSpot(taken, xWant, zWant, roomy ? box : null, along, across);
+    const { x, z } = spot;
+    taken.add(x + "," + z);
+    if (spot.moved) stepped++;
+    if (x < xLo - 1e-9 || x > xHi + 1e-9 || z < vLo - 1e-9 || z > vHi + 1e-9) outside++;
+
+    // where the text has to start, and where this brick's top left corner is
+    const uText = u0, vText = v0 - c.startRow * px;
+    const uBrick = -x - MICRO_HALF;
+    const vBrick = z + MICRO_HALF;
+
+    out.push({
+      position: [x, planeY, z],
+      offset: {
+        X: round4(uText - uBrick + baseX),
+        Y: round4(vText - vBrick + baseY),
+        Z: 0,
+      },
+      chunk: c,
+      moved: spot.moved,
+      cell: [(-x - u0) / px, (v0 - z) / px],   // where it sits in image pixels
+    });
+  }
+
+  /* A marker in the far corner, so the bricks' bounding box covers the whole
+     picture rather than just the column of anchors. Right is -X and down is
+     -Z, so the bottom right corner is the smallest of both. Skipped when the
+     picture has no room for it or an anchor already sits there. */
+  let corner = null;
+  if (roomy && free(taken, box.xMin, box.zMin)) {
+    taken.add(box.xMin + "," + box.zMin);
+    corner = {
+      position: [box.xMin, planeY, box.zMin],
+      cell: [(-box.xMin - u0) / px, (v0 - box.zMin) / px],
+    };
+  }
+
+  /* Nudge the whole grid back into positive coordinates if anything slipped
+     out. Moving every brick moves the image with it, since each offset is
+     measured from its own brick. */
+  let minX = Infinity, minZ = Infinity;
+  for (const a of out) { minX = Math.min(minX, a.position[0]); minZ = Math.min(minZ, a.position[2]); }
+  const dx = Math.max(0, MICRO_HALF - minX), dz = Math.max(0, MICRO_HALF - minZ);
+  if (dx || dz) {
+    for (const a of out) { a.position[0] += dx; a.position[2] += dz; }
+    if (corner) { corner.position[0] += dx; corner.position[2] += dz; }
+  }
+
+  return { anchors: out, stepped, outside, corner };
+}
+
+/* Nearest free cell to (x, z): the spot itself, then out along the preferred
+   axis in both directions, then a row across, and so on. Cells outside `box`
+   are skipped while there is any hope of staying inside it. */
+function findSpot(taken, x, z, box, along, across) {
+  if (box) {
+    x = Math.min(box.xMax, Math.max(box.xMin, x));
+    z = Math.min(box.zMax, Math.max(box.zMin, z));
+    const spanA = Math.abs(along.x) ? box.xMax - box.xMin : box.zMax - box.zMin;
+    const spanB = Math.abs(across.x) ? box.xMax - box.xMin : box.zMax - box.zMin;
+    for (let b = 0; b <= spanB; b++) {
+      for (const bs of b === 0 ? [0] : [b, -b]) {
+        for (let a = 0; a <= spanA; a++) {
+          for (const as of a === 0 ? [0] : [a, -a]) {
+            const cx = x + along.x * as + across.x * bs;
+            const cz = z + along.z * as + across.z * bs;
+            if (cx < box.xMin || cx > box.xMax || cz < box.zMin || cz > box.zMax) continue;
+            if (free(taken, cx, cz)) return { x: cx, z: cz, moved: as !== 0 || bs !== 0 };
+          }
+        }
+      }
+    }
+  }
+  // the picture is too small or too crowded to hold them all, so spill out of it
+  for (let a = 0; ; a++) {
+    const cx = x + along.x * a, cz = z + along.z * a;
+    if (free(taken, cx, cz)) return { x: cx, z: cz, moved: a !== 0 };
+    if (a > 1e5) throw new Error("Could not find a free cell for an anchor micro.");
+  }
+}
+
+/* Micros are 2cm cubes, so two of them clash whenever their centres are
+   within 2cm on both in-plane axes, not just when they share a cell. */
+function free(taken, x, z) {
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dz = -1; dz <= 1; dz++) {
+      if (taken.has((x + dx) + "," + (z + dz))) return false;
+    }
+  }
+  return true;
+}
+
+function round4(v) { return Math.round(v * 1e6) / 1e6; }   // trims float noise, keeps f32 precision
+
+/* The save object plus its write options, ready for writeBrzLegacy. Every
+   component field mirrors a clipboard the game itself wrote, with only the
+   text, the offsets and the material changed. */
+function buildSave(anchors, opts) {
+  const {
+    scale, font, lineHeight, lineOffset, kerning, material, materialSlider,
+    visibleAnchors, asPrefab, name, corner,
+  } = opts;
+
+  const bricks = anchors.map(a => ({
+    asset_name_index: 0,
+    size: [MICRO_HALF, MICRO_HALF, MICRO_HALF],
+    position: a.position,
+    direction: 4,       // brick up is world +Z
+    rotation: 1,        // matches the calibrated clipboard
+    collision: visibleAnchors
+      ? { player: true, weapon: true, interaction: true, tool: true, physics: true }
+      : { player: false, weapon: false, interaction: false, tool: false, physics: false },
+    visibility: !!visibleAnchors,
+    material_index: 0,
+    material_intensity: 1,
+    color: [255, 255, 255],
+    components: [{
+      type: "Component_TextDisplay",
+      data: {
+        Text: a.chunk.text,
+        Font: 0,
+        Rotation: 0,
+        Skew: 0,
+        Kerning: kerning,
+        LineHeight: lineHeight * scale,
+        WidthScale: 1,
+        LineOffset: lineOffset,
+        Anchor: { X: 0, Y: 0 },
+        Offset: a.offset,
+        Color: { R: 255, G: 255, B: 255, A: 255 },
+        MaterialSlider: materialSlider,
+        ShadingWidth: 2,
+        OutlineColor: { R: 0, G: 0, B: 0, A: 255 },
+        OutlineWidth: 2,
+        ScuffWidth: 0,
+        GraffitiDepthLimit: 5,
+        GraffitiAngleLimit: 45,
+        GraffitiLayer: 0,
+        bEnabled: true,
+        Face: 1,          // the face the calibrated clipboard draws on
+        bAlignToWedge: false,
+        bOverrideColor: true,
+        Typeface: 0,
+        Billboard: 0,
+        Material: material,
+        Shading: 0,
+        bFlipShading: false,
+        Outline: 0,
+        bSharpCorners: true,
+        bSharpOutlines: true,
+        bOverrideOutlineColor: true,
+        bForeground: false,
+      },
+    }],
+  }));
+
+  if (corner) bricks.push({
+    asset_name_index: 0,
+    size: [MICRO_HALF, MICRO_HALF, MICRO_HALF],
+    position: corner.position,
+    direction: 4,
+    rotation: 1,
+    collision: { player: false, weapon: false, interaction: false, tool: false, physics: false },
+    visibility: !!visibleAnchors,
+    material_index: 0,
+    material_intensity: 1,
+    color: [255, 0, 0],   // red, so it is findable when the anchors are shown
+  });
+
+  const save = {
+    description: "made with img2brz v" + VERSION,
+    brick_assets: ["PB_DefaultMicroBrick"],
+    bricks,
+  };
+  const now = stamp(new Date());
+  const write = {
+    externalAssets: [{ type: "BrickFontDescriptor", name: font }],
+    bundle: {
+      name: name || "img2brz",
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+      color: { r: 1, g: 1, b: 1, a: 1 },
+      gameVersion: GAME_VERSION,
+    },
+  };
+  if (asPrefab) write.prefab = makePrefab(bricks);
+  return { save, write };
+}
+
+/* The game's own prefab bounds cover the bricks only and ignore the text they
+   draw, so this does the same.
+
+   The pivot is read in the frame you get after adding addedGlobalGridOffset,
+   and every prefab the game writes centres that frame on the bounds: the
+   offset is minus the centre of the brick box, leaving the pivot centre at
+   the origin. Writing a zero offset and a pivot sitting out at the box centre
+   describes the same geometry but the game does not place it correctly, so
+   match what the game writes. Brick coordinates are whole centimetres, so a
+   box with an odd span leaves half a centimetre in the pivot centre. */
+function makePrefab(bricks) {
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (const b of bricks) {
+    for (let i = 0; i < 3; i++) {
+      lo[i] = Math.min(lo[i], b.position[i] - b.size[i]);
+      hi[i] = Math.max(hi[i], b.position[i] + b.size[i]);
+    }
+  }
+  const mid = [0, 1, 2].map(i => (lo[i] + hi[i]) / 2);
+  const shift = mid.map(v => -Math.round(v));
+  const pivot = {
+    center: { x: mid[0] + shift[0], y: mid[1] + shift[1], z: mid[2] + shift[2] },
+    halfExtent: { x: (hi[0] - lo[0]) / 2, y: (hi[1] - lo[1]) / 2, z: (hi[2] - lo[2]) / 2 },
+  };
+  return {
+    pivots: {
+      bottomStudsPivot: pivot, studsExpandedPivot: pivot,
+      topStudsPivot: pivot, boundsPivot: pivot,
+      bottomStudsDirection: "Z_Negative", topStudsDirection: "Z_Positive",
+      bBottomStudsValid: true, bTopStudsValid: true,
+    },
+    addedGlobalGridOffset: { x: shift[0], y: shift[1], z: shift[2] },
+    bIsPhysicsGrid: false, bFreezePhysicsGrid: false,
+    bFreezeGlobalGrid: false, bIsMicrochipPrefab: false,
+  };
+}
+
+/* The game stamps its bundles; brs-js leaves the fields empty, which is what
+   made the generated files stand out next to a real clipboard. */
+function stamp(d) {
+  const p = n => String(n).padStart(2, "0");
+  return d.getFullYear() + "." + p(d.getMonth() + 1) + "." + p(d.getDate()) + "-" +
+         p(d.getHours()) + "." + p(d.getMinutes()) + "." + p(d.getSeconds());
+}
+
+/* Everything above, in order. */
+function convert(data, w, h, o, memo) {
+  const px = STUD_CM / o.pixelsPerStud;      // world cm covered by one pixel
+  const scale = px / 2;                      // 2cm is the 1x pixel these settings were tuned at
+
+  /* Reading and packing the pixels is the slow half and only a few settings
+     touch it, so hand in a memo object and changing a material stays instant. */
+  const key = [w, h, o.alphaThreshold, o.short, o.tolerance, o.limit].join("/");
+  let shown, runs, chunks;
+  if (memo && memo.key === key && memo.data === data) {
+    ({ shown, runs, chunks } = memo);
+  } else {
+    const read = readCells(data, w, h, o.alphaThreshold, o.short, o.tolerance);
+    shown = read.shown; runs = read.runs;
+    chunks = encode(read.cells, read.rowEnd, w, h, o.limit, o.short);
+    if (memo) Object.assign(memo, { key, data, shown, runs, chunks });
+  }
+  const { anchors, stepped, outside, corner } = planAnchors(chunks, {
+    w, h, px,
+    stepMode: o.stepMode,
+    baseX: o.baseX,
+    baseY: o.baseY * scale,   // the calibration nudge scales with the text
+    planeY: 0,
+  });
+  const built = buildSave(anchors, Object.assign({ scale, corner }, o));
+  return { chunks, anchors, stepped, outside, corner, shown, runs, px, scale,
+           save: built.save, write: built.write };
+}
+
+if (typeof module !== "undefined") {
+  module.exports = { convert, encode, readCells, planAnchors, buildSave, makePrefab, EM, BLOCK, BR, RIGHT_X };
+}
+// ===== CORE END =====
+
+/* ---------------------------------------------------------------- interface */
+const $ = id => document.getElementById(id);
+const state = {
+  bitmap: null, name: "image", data: null, w: 0, h: 0,
+  result: null, zoom: 1, mode: "pixels", error: null,
+  pps: 5,          // pixels per stud, the only thing that sets resolution
+  resW: 0, resH: 0 // the resolution those settings currently ask for
+};
+
+/* Width and height in studs resize the drawn text and leave the resolution
+   alone, so they move pixels-per-stud instead. Only pixels-per-stud (and the
+   reset next to it) resample the image. */
+function studs() {
+  return { w: Math.max(0.01, +$("wStuds").value || 1), h: Math.max(0.01, +$("hStuds").value || 1) };
+}
+function setPps(v) {
+  state.pps = Math.min(200, Math.max(0.05, v));
+  $("pps").value = +state.pps.toFixed(4);
+}
+function resFromPps() {
+  const s = studs();
+  state.resW = Math.max(1, Math.round(s.w * state.pps));
+  state.resH = Math.max(1, Math.round(s.h * state.pps));
+}
+
+function opts() {
+  return {
+    pixelsPerStud: state.pps,
+    alphaThreshold: +$("alpha").value,
+    short: $("hex4").checked,
+    tolerance: +$("tol").value,
+    limit: Math.max(100, +$("limit").value || 10000),
+    stepMode: $("stepMode").value,
+    baseX: +$("baseX").value || 0,
+    baseY: +$("baseY").value || 0,
+    lineHeight: +$("lineHeight").value || 1.59375,
+    lineOffset: +$("lineOffset").value || 0,
+    kerning: +$("kerning").value || 0,
+    material: +$("material").value,
+    materialSlider: Math.max(0, Math.min(10, +$("slider").value || 0)),
+    font: $("font").value.trim() || "GlacialIndifferencePlus",
+    visibleAnchors: $("showAnchors").checked,
+    asPrefab: $("prefab").checked,
+    name: state.name,
+  };
+}
+
+/* ---- loading */
+function loadFile(file) {
+  if (!file || !file.type.startsWith("image/")) return;
+  state.name = file.name.replace(/\.[^.]+$/, "");
+  createImageBitmap(file).then(bm => {
+    state.bitmap = bm;
+    $("fileName").textContent = file.name + "  " + bm.width + "x" + bm.height;
+    $("drop").style.display = "none";
+    $("stage").classList.add("on");
+    $("charPanel").style.display = "block";
+    $("wStuds").value = +(bm.width / 5).toFixed(2);    // five pixels to the stud
+    $("hStuds").value = +(bm.height / 5).toFixed(2);
+    state.resW = bm.width; state.resH = bm.height;
+    setPps(5);
+    state.zoom = 1;
+    run();
+  }).catch(() => setMessage("That file did not decode as an image.", "bad"));
+}
+
+$("drop").addEventListener("click", pick);
+$("drop").addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+function pick() {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/*";
+  inp.onchange = () => loadFile(inp.files[0]);
+  inp.click();
+}
+["dragenter", "dragover"].forEach(ev => document.addEventListener(ev, e => {
+  e.preventDefault(); $("drop").classList.add("hot");
+}));
+["dragleave", "drop"].forEach(ev => document.addEventListener(ev, e => {
+  if (ev === "dragleave" && e.relatedTarget) return;
+  $("drop").classList.remove("hot");
+}));
+document.addEventListener("drop", e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) loadFile(f);
+});
+$("clear").addEventListener("click", () => {
+  state.bitmap = null; state.result = null;
+  $("stage").classList.remove("on");
+  $("charPanel").style.display = "none";
+  $("drop").style.display = "flex";
+  $("save").disabled = true;
+  setMessage("", "");
+  ["sRes", "sStuds", "sBricks", "sChars", "sMax", "sSide"].forEach(id => $(id).textContent = "-");
+});
+
+/* ---- pipeline */
+let pending = null;
+function run() {
+  clearTimeout(pending);
+  pending = setTimeout(doRun, 120);
+}
+
+function doRun() {
+  if (!state.bitmap) return;
+  const o = opts();
+  const w = Math.max(1, state.resW), h = Math.max(1, state.resH);
+  if (w * h > 6e6) { setMessage("That is over six million pixels. Shrink it before converting.", "bad"); return; }
+
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = $("smooth").checked;
+  ctx.imageSmoothingQuality = "high";
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(state.bitmap, 0, 0, w, h);
+  const img = ctx.getImageData(0, 0, w, h);
+  state.data = img.data; state.w = w; state.h = h;
+
+  try {
+    state.result = convert(img.data, w, h, o);
+    state.error = null;
+    const n = state.result.outside;
+    setMessage(n
+      ? n + " of " + state.result.anchors.length + " anchor micros could not fit inside the picture and " +
+        "stick out past its edge. The text still lands correctly; only the invisible micros are outside. " +
+        "Raise pixels per stud, or make the picture bigger, to give them room."
+      : "", "warn");
+  } catch (err) {
+    state.result = null; state.error = err;
+    setMessage(err.message, "bad");
+  }
+  paint();
+  stats();
+  fillChunkList();
+}
+
+function stats() {
+  const r = state.result, o = opts();
+  $("sRes").textContent = state.w + " x " + state.h + " px";
+  $("sStuds").textContent = fmt(state.w / o.pixelsPerStud) + " x " + fmt(state.h / o.pixelsPerStud) + " studs";
+  if (!r) { ["sBricks", "sChars", "sTags", "sMax", "sSide"].forEach(id => $(id).textContent = "-"); $("save").disabled = true; return; }
+  const total = r.chunks.reduce((a, c) => a + c.len, 0);
+  const max = r.chunks.reduce((a, c) => Math.max(a, c.len), 0);
+  $("sBricks").textContent = r.chunks.length.toLocaleString();
+  $("sChars").textContent = total.toLocaleString();
+  $("sTags").textContent = r.runs.toLocaleString();
+  $("sMax").textContent = max.toLocaleString() + " / " + o.limit.toLocaleString();
+  $("sSide").textContent = r.outside;
+  $("save").disabled = false;
+}
+function fmt(v) { return (Math.round(v * 100) / 100).toString(); }
+
+function setMessage(text, kind) {
+  const box = $("msg");
+  if (!text) { box.innerHTML = ""; return; }
+  box.innerHTML = '<div class="note ' + (kind || "") + '"></div>';
+  box.firstChild.textContent = text;
+}
+
+/* ---- preview */
+function paint() {
+  const cv = $("preview"), w = state.w, h = state.h;
+  const z = state.zoom;
+  cv.width = w * z; cv.height = h * z;
+  const ctx = cv.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+
+  const src = document.createElement("canvas");
+  src.width = w; src.height = h;
+  const sctx = src.getContext("2d");
+  const img = sctx.createImageData(w, h);
+  // exactly the colours the components will paint, merges and all
+  if (state.result) img.data.set(state.result.shown);
+  else {
+    const thr = +$("alpha").value;
+    for (let i = 0; i < w * h; i++) {
+      const j = i * 4;
+      if (state.data[j + 3] < thr) continue;
+      img.data[j] = state.data[j]; img.data[j + 1] = state.data[j + 1];
+      img.data[j + 2] = state.data[j + 2]; img.data[j + 3] = 255;
+    }
+  }
+  sctx.putImageData(img, 0, 0);
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.drawImage(src, 0, 0, cv.width, cv.height);
+
+  const showChunks = state.mode === "chunks" && state.result;
+  $("legend").hidden = !showChunks;
+  if (!showChunks) return;
+
+  ctx.globalAlpha = 0.5;
+  for (const a of state.result.anchors) {
+    const c = a.chunk;
+    ctx.fillStyle = "#0f7d74";
+    ctx.fillRect(0, c.startRow * z, cv.width, Math.max(1, z * 0.12));
+    ctx.fillRect(c.startCol * z, c.startRow * z, Math.max(2, z), Math.max(2, z));
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#a8560f";
+  for (const a of state.result.anchors) {
+    ctx.fillRect(a.cell[0] * z - 1, a.cell[1] * z - 1, Math.max(2, z), Math.max(2, z));
+  }
+  if (state.result.corner) {
+    const c = state.result.corner.cell;
+    ctx.fillStyle = "#d02a12";
+    ctx.fillRect(c[0] * z - 1, c[1] * z - 1, Math.max(3, z), Math.max(3, z));
+  }
+}
+
+$("mPix").addEventListener("click", () => setMode("pixels"));
+$("mChunk").addEventListener("click", () => setMode("chunks"));
+function setMode(m) {
+  state.mode = m;
+  $("mPix").setAttribute("aria-pressed", m === "pixels");
+  $("mChunk").setAttribute("aria-pressed", m === "chunks");
+  paint();
+}
+$("zoomIn").addEventListener("click", () => { state.zoom = Math.min(16, state.zoom * 2); $("zoomLabel").textContent = state.zoom + "x"; paint(); });
+$("zoomOut").addEventListener("click", () => { state.zoom = Math.max(0.25, state.zoom / 2); $("zoomLabel").textContent = state.zoom + "x"; paint(); });
+
+/* ---- character view */
+function fillChunkList() {
+  const sel = $("chunkPick");
+  sel.innerHTML = "";
+  if (!state.result) { $("chars").textContent = ""; $("chunkInfo").textContent = ""; return; }
+  state.result.chunks.forEach((c, i) => {
+    const o = document.createElement("option");
+    o.value = i; o.textContent = (i + 1) + " of " + state.result.chunks.length;
+    sel.appendChild(o);
+  });
+  showChunk(0);
+}
+$("chunkPick").addEventListener("change", e => showChunk(+e.target.value));
+function showChunk(i) {
+  const r = state.result; if (!r) return;
+  const c = r.chunks[i], a = r.anchors[i];
+  const cap = 4000;
+  $("chars").textContent = c.text.length > cap ? c.text.slice(0, cap) + "\n... " + (c.text.length - cap) + " more characters" : c.text;
+  $("chunkInfo").textContent =
+    c.len.toLocaleString() + " chars, starts at row " + c.startRow + " col " + c.startCol +
+    ", brick at " + a.position.join(", ") + ", offset " + a.offset.X + " / " + a.offset.Y;
+}
+
+/* ---- aspect lock */
+let lastEdited = "w";
+const aspect = () => state.bitmap ? state.bitmap.width / state.bitmap.height : 1;
+
+$("wStuds").addEventListener("input", () => {
+  lastEdited = "w";
+  if ($("lockAspect").checked && state.bitmap) $("hStuds").value = +(studs().w / aspect()).toFixed(2);
+  setPps(state.resW / studs().w);   // same pixels, drawn bigger or smaller
+  resFromPps();
+  run();
+});
+$("hStuds").addEventListener("input", () => {
+  lastEdited = "h";
+  if ($("lockAspect").checked && state.bitmap) $("wStuds").value = +(studs().h * aspect()).toFixed(2);
+  setPps(state.resH / studs().h);
+  resFromPps();
+  run();
+});
+$("lockAspect").addEventListener("change", () => {
+  if (!$("lockAspect").checked || !state.bitmap) return;
+  if (lastEdited === "w") $("hStuds").value = +(studs().w / aspect()).toFixed(2);
+  else $("wStuds").value = +(studs().h * aspect()).toFixed(2);
+  setPps(lastEdited === "w" ? state.resW / studs().w : state.resH / studs().h);
+  resFromPps();
+  run();
+});
+$("pps").addEventListener("input", () => { setPps(+$("pps").value || 5); resFromPps(); run(); });
+$("ppsReset").addEventListener("click", () => {
+  if (!state.bitmap) return;
+  setPps(state.bitmap.width / studs().w);   // one output pixel per source pixel
+  resFromPps();
+  run();
+});
+$("alpha").addEventListener("input", () => { $("alphaOut").textContent = $("alpha").value; run(); });
+$("tol").addEventListener("input", () => { $("tolOut").textContent = (+$("tol").value).toFixed(1); run(); });
+["smooth", "hex4", "limit", "stepMode", "baseX", "baseY", "lineHeight", "lineOffset", "kerning",
+ "material", "slider", "font", "showAnchors", "prefab"].forEach(id => {
+  $(id).addEventListener("input", run);
+  $(id).addEventListener("change", run);
+});
+
+/* ---- writing the file */
+function writer() {
+  const B = window.BRS || {};
+  return (B.brdb && B.brdb.writeBrzLegacy) || B.writeBrzLegacy || null;
+}
+$("save").addEventListener("click", () => {
+  const write = writer();
+  if (!write) { setMessage("brs-js did not load. Check the network tab, then reload.", "bad"); return; }
+  const r = state.result;
+  if (!r) return;
+  try {
+    const bytes = write(r.save, r.write);
+    const url = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = state.name + ".brz";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (err) {
+    setMessage("Writing the save failed: " + err.message, "bad");
+  }
+});
+
+$("ver").textContent = "v" + VERSION;
+
+window.addEventListener("load", () => {
+  if (!writer()) setMessage("brs-js did not load from the CDN, so saving will not work. Reload with a connection.", "bad");
+});
+</script>
+</body>
+</html>
