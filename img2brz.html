@@ -63,6 +63,19 @@ main{display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:22px; padding:
 #drop strong{font-family:var(--disp); font-size:16px; color:var(--ink); display:block}
 #stage{display:none}
 #stage.on{display:block}
+#busy{
+  position:absolute; top:10px; left:50%; transform:translateX(-50%);
+  display:flex; align-items:center; gap:8px; padding:7px 12px;
+  background:var(--ink); color:#fff; font-size:12px; letter-spacing:.06em;
+}
+#busy[hidden]{display:none}
+/* a transform animation keeps running on the compositor while the main thread
+   is busy, which is the whole point of it */
+.ring{
+  width:12px; height:12px; border-radius:50%; border:2px solid #fff6; border-top-color:#fff;
+  animation:spin .7s linear infinite; will-change:transform;
+}
+@keyframes spin{ to{ transform:rotate(360deg) } }
 .canvaswrap{
   position:relative; overflow:auto; max-height:60vh; border:1px solid var(--line);
   background:repeating-conic-gradient(#00000010 0% 25%, transparent 0% 50%) 0 0/12px 12px, #fff;
@@ -80,6 +93,8 @@ button.primary:hover{background:#0b625b}
 button.primary:disabled{background:var(--line); border-color:var(--line); color:var(--muted); cursor:not-allowed}
 button.ghost{border-color:var(--line)}
 .row{display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; margin:7px 0}
+/* settings that only apply while the one above them is on */
+.row.child{padding-left:12px; border-left:2px solid var(--line2)}
 .row label{color:var(--ink)}
 .row .hint{color:var(--muted); font-size:11px; display:block}
 input[type=number],input[type=text],select{
@@ -101,6 +116,21 @@ dl.stats dd b{font-weight:600}
 .note.bad{border-color:var(--bad); background:#f7dedb}
 details{border-top:1px solid var(--line2); margin-top:12px; padding-top:8px}
 hr.split{border:0; border-top:1px solid var(--line2); margin:12px 0 8px}
+.actual{grid-column:2; text-align:right; font-size:11px; color:var(--accent)}
+.actual:empty{display:none}
+.warnicon{
+  display:inline-flex; align-items:center; justify-content:center; cursor:help;
+  width:16px; height:16px; border-radius:50%; background:var(--warn); color:#fff;
+  font-family:var(--disp); font-size:11px; font-weight:700; line-height:1;
+}
+.warnicon[hidden]{display:none}
+.helpicon{
+  display:inline-flex; align-items:center; justify-content:center; cursor:help;
+  width:16px; height:16px; border-radius:50%; border:1px solid var(--line);
+  background:var(--panel); color:var(--muted);
+  font-family:var(--disp); font-size:11px; font-weight:700; line-height:1;
+}
+.helpicon:hover{border-color:var(--accent); color:var(--accent)}
 summary{cursor:pointer; font-family:var(--disp); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
 summary h2{display:inline; border:0; padding:0; margin:0}
 .panel details{border-top:0; margin-top:0; padding-top:0}
@@ -130,7 +160,7 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
       <h2>Image</h2>
       <div id="drop" tabindex="0" role="button" aria-label="Choose an image">
         <strong>Drop an image here</strong>
-        <span>or click to pick one. PNG with alpha gives you transparent pixels.</span>
+        <span>or paste one, or click to pick one. PNG with alpha gives you transparent pixels.</span>
       </div>
       <div id="stage">
         <div class="bar" style="margin:0 0 10px">
@@ -144,7 +174,10 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
           <button class="ghost" id="clear">Remove image</button>
           <button class="ghost" id="orig" style="margin-left:auto" title="Hold S, or this button, to see the source image"><u>S</u>how original</button>
         </div>
-        <div class="canvaswrap"><canvas id="preview"></canvas></div>
+        <div class="canvaswrap">
+          <canvas id="preview"></canvas>
+          <div id="busy" hidden><span class="ring"></span>Working</div>
+        </div>
         <div class="bar"><span id="fileName" style="color:var(--muted)"></span></div>
         <div class="legend" id="legend" hidden>
           <span><i class="swatch" style="background:#0f7d74"></i>chunk boundary</span>
@@ -156,10 +189,11 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
 
   <div class="panel notes">
     <h2>How it works</h2>
-    <p>Width and height set how big the picture is drawn, not how many pixels it has: they change the text size and leave the resolution alone. Pixels per stud is the resampling control, and Reset puts it back to one output pixel per source pixel at the current width.</p>
-    <p>Text reads along world -X and stacks up +Z, so the picture hangs in the XZ plane on one Y. Anchors sit on a 2cm grid over the picture. The layout takes as many columns as it needs to fit one anchor per component in the rows available, and each anchor wants the row its text starts on, mapped across the whole picture height. Each takes the first cell of the row it wants, or the cell after the previous anchor when that row is already taken, so they stay spread over the picture instead of piling up wherever the detail is, and the first one always lands on the top left cell. Each carries the offset that puts its text back where it belongs. If a picture is too small to hold one micro per component they spill out, and the Output panel says how many.</p>
-    <p>Merging nudges each pixel onto its neighbors' color where the shift stays under the tolerance, in reading order and wrapping across rows exactly as the color tag does, which turns scattered near-identical pixels into one long run and one tag. The run re-centers itself on everything it has swallowed rather than sticking with the color it opened on, and nothing is ever moved further than the tolerance: 1 is around four steps of 8-bit gray and is hard to see, while 2 flattens film grain and faint texture. On a noisy photograph it typically cuts the character count by half or more.</p>
-    <p>Bricks sit on whole centimeters, so a picture whose size is not a whole number of them cannot be boxed exactly. Its top left corner is pinned to the grid and the leftover sliver, always under one centimeter, is left at the bottom right. The red brick starts in that corner, grows upward until something stops it, and if only the top edge did, grows leftward as well, so it ends up filling everything the anchors are not using.</p>
+    <p>Width and height set how big the picture is drawn, not how many pixels it has: they change the text size and leave the resolution alone. "Pixels per stud"/"Downsample factor" let you downsample the image, and "Reset" puts it back at full resolution.</p>
+
+    <p>Pixels get turned into text components on bricks, packed on the left side of the prefab. They are placed approximately where the pixels themselves lie in-world. When the selected size is not a multiple of micro in size, the image slightly extends outside the prefab on the bottom and right sides. An invisible red brick is added as padding on the right, to make the prefab's size match the image's.</p>
+
+    <p>Lowering the quality merges adjacent pixels' colors, using fewer color tags and allowing you to save on bricks. The PELT algorithm is used to pick the best-looking way to do this, depending on the quality.</p>
   </div>
   </div>
 
@@ -183,7 +217,10 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
       </div>
       <div class="row">
         <label for="pps">Pixels per stud <span class="hint">the same resampling, in studs</span></label>
-        <input type="number" id="pps" min="1" step="1" value="5">
+        <span style="display:flex; gap:6px; align-items:center">
+          <span class="warnicon" id="ppsWarn" role="img" hidden>!</span>
+          <input type="number" id="pps" min="1" step="1" value="5" style="width:76px">
+        </span>
       </div>
       <div class="row">
         <label for="lockAspect">Keep aspect ratio</label>
@@ -203,12 +240,23 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
       </div>
       <!-- one of these shows at a time, whichever the merge algorithm uses -->
       <div class="row" id="rowTol">
-        <label for="tol">Quality <span class="hint" id="tolOut">merges nothing</span></label>
+        <label for="tol">Quality <span class="hint" id="tolOut">lossless</span></label>
         <input type="range" id="tol" min="0" max="5" step="0.1" value="5">
       </div>
       <div class="row" id="rowLam">
-        <label for="lam">Quality <span class="hint" id="lamOut">penalty 0.1</span></label>
+        <label for="lam">Quality <span class="hint" id="lamOut">PELT penalty 0.1</span></label>
         <input type="range" id="lam" min="0" max="100" step="1" value="100">
+      </div>
+      <div class="row">
+        <label for="overlap">Overlap pixels <span class="hint">covers the game's depth offset gaps</span></label>
+        <span style="display:flex; gap:8px; align-items:center">
+          <span class="helpicon" role="img" title="Pixel overlapping can change the image dimensions
+by around 0.01% due to rounding errors in the game.
+
+Disabling it can produce tiny gaps between the pixels at
+certain angles, but otherwise the image dimensions would be exact.">?</span>
+          <input type="checkbox" id="overlap" checked>
+        </span>
       </div>
     </div>
 
@@ -224,7 +272,6 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
         <dt id="sSideLabel">Bricks outside picture boundary</dt><dd id="sSide">-</dd>
       </dl>
       <div id="msg"></div>
-      <div id="msgScale"></div>
       <div style="margin-top:12px"><button class="primary" id="save" disabled>Save .brz</button></div>
     </div>
 
@@ -246,15 +293,15 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
         <label for="slider">Material intensity <span class="hint" id="sliderOut">10</span></label>
         <input type="range" id="slider" min="1" max="10" step="1" value="10">
       </div>
-      <div class="row graffiti">
+      <div class="row child graffiti">
         <label for="gDepth">Depth limit <span class="hint">cm</span></label>
         <input type="number" id="gDepth" min="1" max="200" step="0.5" value="5">
       </div>
-      <div class="row graffiti">
+      <div class="row child graffiti">
         <label for="gAngle">Angle limit <span class="hint">degrees</span></label>
         <input type="number" id="gAngle" min="0" max="180" step="1" value="45">
       </div>
-      <div class="row graffiti">
+      <div class="row child graffiti">
         <label for="gLayer">Priority</label>
         <input type="number" id="gLayer" min="0" max="255" step="1" value="0">
       </div>
@@ -275,6 +322,17 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
           <label for="hex4">Short color tags <span class="hint">4 bits per channel, usually a loss</span></label>
           <input type="checkbox" id="hex4">
         </div>
+        <div class="row overlapRow">
+          <label>Overlap pixels <span class="hint">set in the Pixels panel</span></label>
+        </div>
+        <div class="row child overlapRow">
+          <label for="overlapCm">Overlap at most (cm)</label>
+          <input type="number" id="overlapCm" min="0" max="5" step="0.01" value="0.01">
+        </div>
+        <div class="row child overlapRow">
+          <label for="overlapPct">Overlap at most (%)</label>
+          <input type="number" id="overlapPct" min="0" max="50" step="0.5" value="5">
+        </div>
         <div class="row">
           <label for="showAnchors">Leave anchor micros visible <span class="hint">for debugging</span></label>
           <input type="checkbox" id="showAnchors">
@@ -282,20 +340,27 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
 
         <hr class="split">
         <div class="row">
+          <label for="baseZ">Z offset <span class="hint">cm out of the face</span></label>
+          <input type="number" id="baseZ" step="0.01" value="0">
+        </div>
+        <div class="row">
           <label for="font">Font asset</label>
           <input type="text" class="wide" id="font" value="GlacialIndifferencePlus">
         </div>
         <div class="row">
-          <label for="lineHeight">Line height at 1x <span class="hint">scales with pixel size</span></label>
+          <label for="lineHeight">Line height <span class="hint">at 1x, scales with pixel size</span></label>
           <input type="number" id="lineHeight" step="0.00001" value="1.59375">
+          <span class="actual" id="lhActual"></span>
         </div>
         <div class="row">
           <label for="lineOffset">Line spacing <span class="hint">does not scale</span></label>
           <input type="number" id="lineOffset" step="0.1" value="-6">
+          <span class="actual" id="loActual"></span>
         </div>
         <div class="row">
           <label for="kerning">Letter spacing <span class="hint">kerning; 0 keeps one pixel per glyph</span></label>
-          <input type="number" id="kerning" step="0.01" value="0">
+          <input type="number" id="kerning" step="0.1" value="0">
+          <span class="actual" id="knActual"></span>
         </div>
         <div class="row">
           <label for="baseY">Base Y offset at 1x <span class="hint">scales with pixel size</span></label>
@@ -769,7 +834,20 @@ function encode(cells, palette, rowEnd, w, h, limit, short) {
 }
 
 /* Text right runs along world -X, up along world +Z. */
-const VERSION = "1.8.4";
+const VERSION = "1.12.2";
+
+/* Glyph metrics, fitted to the calibration. The block glyph is drawn
+   LineHeight * 2/1.59375 across, and one unit of Kerning or LineSpacing moves
+   the advance by a thirty-second of that. Both fall out of the two settings
+   that are known to work at 1x: 1.59375 / -6 / 0 draws a glyph exactly one
+   pixel wide with no overlap, and 1.6458 / -7 / -1 overlaps slightly.
+
+   Overlapping means drawing each glyph a little larger than its pixel while
+   holding the advance at exactly one pixel, so the seams are covered without
+   the image drifting. Scaling all three together would hold the overlap at a
+   fixed percentage, which is invisible on small pixels and obvious on large
+   ones; deriving them from a distance keeps it the same width throughout. */
+const KERN_UNITS_PER_GLYPH = 32;
 const RIGHT_X = -1;
 
 /* The client that wrote the reference clipboards. Cosmetic, but brs-js's
@@ -810,7 +888,7 @@ const GAME_VERSION = "CL15526";
    Wherever it lands, its offset is measured from there, so the text still
    draws on the pixel it belongs to. */
 function planAnchors(chunks, opts) {
-  const { w, h, px, baseX, baseY, planeY } = opts;
+  const { w, h, px, baseX, baseY, baseZ, planeY } = opts;
 
   /* Bricks are 2cm cubes and the game places them best on a 2cm grid, so the
      box they cover is a whole number of them, floored rather than rounded up.
@@ -857,20 +935,22 @@ function planAnchors(chunks, opts) {
       offset: {
         X: round4(-2 * col + baseX),
         Y: round4(2 * r - c.startRow * px + baseY),
-        Z: 0,
+        Z: round4(baseZ || 0),        // a flat nudge out of the face, unscaled
       },
       chunk: c,
       cell: [(2 * col + MICRO_HALF) / px, (2 * r + MICRO_HALF) / px],   // in image pixels
     });
   }
 
-  /* A marker in the far corner, so the bricks' bounding box covers the whole
-     picture rather than just the column of anchors. Right is -X and down is
-     -Z, so the bottom right corner is the smallest of both. It starts as one
-     micro and grows upward as far as it can, and if nothing but the top edge
-     stopped it, it then grows leftward too. Growth is in 2cm steps to keep
-     the center and half extents whole. Skipped when the picture has no room
-     for it or an anchor already sits there. */
+  /* Markers filling in what the anchors leave, so the bricks' bounding box
+     covers the whole picture rather than just their column. Right is +X and
+     down is -Z, so the bottom right corner is the largest x and smallest z.
+     The first starts there as one micro and grows upward as far as it can,
+     and if nothing but the top edge stopped it, it then grows leftward too.
+     Growth is in 2cm steps to keep the center and half extents whole. Each is
+     skipped when the picture has no room for it or something already sits
+     where it would go. */
+  const markers = [];
   let corner = null;
   if (roomy && free(taken, box.xMax, box.zMin)) {
     let x0 = box.xMax - MICRO_HALF, x1 = box.xMax + MICRO_HALF;
@@ -894,7 +974,23 @@ function planAnchors(chunks, opts) {
     corner = {
       position: [(x0 + x1) / 2, planeY, (z0 + z1) / 2],
       size: [(x1 - x0) / 2, MICRO_HALF, (z1 - z0) / 2],
+      span: [x0, x1, z0, z1],
     };
+    markers.push(corner);
+  }
+
+  // and a single micro in the bottom left, where the first one did not reach
+  if (roomy && free(taken, box.xMin, box.zMin)) {
+    const inside = corner &&
+      box.xMin + MICRO_HALF > corner.span[0] && box.xMin - MICRO_HALF < corner.span[1] &&
+      box.zMin + MICRO_HALF > corner.span[2] && box.zMin - MICRO_HALF < corner.span[3];
+    if (!inside) {
+      taken.add(box.xMin + "," + box.zMin);
+      markers.push({
+        position: [box.xMin, planeY, box.zMin],
+        size: [MICRO_HALF, MICRO_HALF, MICRO_HALF],
+      });
+    }
   }
 
   /* Nudge the whole grid back into positive coordinates if anything slipped
@@ -905,10 +1001,10 @@ function planAnchors(chunks, opts) {
   const dx = Math.max(0, MICRO_HALF - minX), dz = Math.max(0, MICRO_HALF - minZ);
   if (dx || dz) {
     for (const a of out) { a.position[0] += dx; a.position[2] += dz; }
-    if (corner) { corner.position[0] += dx; corner.position[2] += dz; }
+    for (const m of markers) { m.position[0] += dx; m.position[2] += dz; }
   }
 
-  return { anchors: out, outside, corner, cols, rows };
+  return { anchors: out, outside, markers, cols, rows };
 }
 
 /* Micros are 2cm cubes, so two of them clash whenever their centers are
@@ -930,9 +1026,17 @@ function round4(v) { return Math.round(v * 1e6) / 1e6; }   // trims float noise,
 function buildSave(anchors, opts) {
   const {
     scale, font, lineHeight, lineOffset, kerning, material, materialSlider,
-    visibleAnchors, name, corner,
+    visibleAnchors, name, markers, overlapCm, overlapPct,
     graffitiDepth, graffitiAngle, graffitiLayer,
   } = opts;
+
+  /* Whichever limit binds: the share keeps small pixels looking right, the
+     distance stops large ones overlapping visibly. At zero this collapses to
+     the plain calibration. */
+  const bleed = Math.max(0, Math.min(overlapCm || 0, (overlapPct || 0) / 100 * 2 * scale));
+  const drawn = 2 * scale + bleed;                  // glyph box, in cm
+  const nudge = -KERN_UNITS_PER_GLYPH * bleed / drawn;   // pulls the advance back
+  const textSize = drawn * (lineHeight / 2);
 
   const bricks = anchors.map(a => ({
     asset_name_index: 0,
@@ -954,10 +1058,10 @@ function buildSave(anchors, opts) {
         Font: 0,
         Rotation: 0,
         Skew: 0,
-        Kerning: kerning,
-        LineHeight: lineHeight * scale,
+        Kerning: kerning + nudge,
+        LineHeight: textSize,
         WidthScale: 1,
-        LineOffset: lineOffset,
+        LineOffset: lineOffset + nudge,
         Anchor: { X: 0, Y: 0 },
         Offset: a.offset,
         Color: { R: 255, G: 255, B: 255, A: 255 },
@@ -987,10 +1091,10 @@ function buildSave(anchors, opts) {
     }],
   }));
 
-  if (corner) bricks.push({
+  for (const marker of markers || []) bricks.push({
     asset_name_index: 0,
-    size: corner.size,
-    position: corner.position,
+    size: marker.size,
+    position: marker.position,
     direction: 4,
     rotation: 0,   // unrotated, so its extents are world X/Y/Z as measured
     collision: { player: false, weapon: false, interaction: false, tool: false, physics: false },
@@ -1000,6 +1104,7 @@ function buildSave(anchors, opts) {
     color: [255, 0, 0],   // red, so it is findable when the anchors are shown
   });
 
+  const metrics = { lineHeight: textSize, lineOffset: lineOffset + nudge, kerning: kerning + nudge };
   const save = {
     description: "made with img2brz v" + VERSION,
     brick_assets: ["PB_DefaultMicroBrick"],
@@ -1018,7 +1123,7 @@ function buildSave(anchors, opts) {
     },
   };
   write.prefab = makePrefab(bricks);
-  return { save, write };
+  return { save, write, metrics };
 }
 
 /* The game's own prefab bounds cover the bricks only and ignore the text they
@@ -1067,16 +1172,21 @@ function stamp(d) {
 }
 
 /* Everything above, in order. */
+/* Every setting the pixel stage reads has to appear here, or flipping one
+   silently hands back the previous result. The caller uses it too, to know
+   whether a run will redo that stage or coast on the memo. */
+function pixelKey(w, h, o) {
+  return [w, h, o.alphaThreshold, o.short, o.tolerance, o.limit,
+          o.algorithm, o.lambda].join("/");
+}
+
 function convert(data, w, h, o, memo) {
   const px = STUD_CM / o.pixelsPerStud;      // world cm covered by one pixel
   const scale = px / 2;                      // 2cm is the 1x pixel these settings were tuned at
 
   /* Reading and packing the pixels is the slow half and only a few settings
      touch it, so hand in a memo object and changing a material stays instant. */
-  // every setting the pixel stage reads has to appear here, or flipping one
-  // silently hands back the previous result
-  const key = [w, h, o.alphaThreshold, o.short, o.tolerance, o.limit,
-               o.algorithm, o.lambda].join("/");
+  const key = pixelKey(w, h, o);
   let shown, tags, chunks, rmse, maxErr, runs;
   if (memo && memo.key === key && memo.data === data) {
     ({ shown, tags, chunks, rmse, maxErr, runs } = memo);
@@ -1086,19 +1196,20 @@ function convert(data, w, h, o, memo) {
     ({ chunks, tags } = encode(read.cells, read.palette, read.rowEnd, w, h, o.limit, o.short));
     if (memo) Object.assign(memo, { key, data, shown, tags, chunks, rmse, maxErr, runs });
   }
-  const { anchors, outside, corner, cols, rows } = planAnchors(chunks, {
+  const { anchors, outside, markers, cols, rows } = planAnchors(chunks, {
     w, h, px,
     baseX: o.baseX,
+    baseZ: o.baseZ,
     baseY: o.baseY * scale,   // the calibration nudge scales with the text
     planeY: 0,
   });
-  const built = buildSave(anchors, Object.assign({ scale, corner }, o));
-  return { chunks, anchors, outside, corner, cols, rows, shown, tags, rmse, maxErr, runs,
-           px, scale, save: built.save, write: built.write };
+  const built = buildSave(anchors, Object.assign({ scale, markers }, o));
+  return { chunks, anchors, outside, markers, cols, rows, shown, tags, rmse, maxErr, runs,
+           px, scale, metrics: built.metrics, save: built.save, write: built.write };
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { convert, encode, readCells, planAnchors, buildSave, makePrefab, EM, BLOCK, BR, RIGHT_X };
+  module.exports = { convert, encode, readCells, planAnchors, buildSave, makePrefab, pixelKey, EM, BLOCK, BR, RIGHT_X };
 }
 // ===== CORE END =====
 
@@ -1107,6 +1218,8 @@ const $ = id => document.getElementById(id);
 const state = {
   bitmap: null, name: "image", data: null, w: 0, h: 0,
   result: null, zoom: 1, mode: "pixels", showOriginal: false,
+  perPixel: 3e-3,  // ms per pixel, replaced by the first real measurement
+  runToken: 0,
   raster: null,    // {key, data} so a component tweak does not re-rasterise
   memo: {},        // convert's cache of the pixel stage
   pps: 5,          // pixels per stud, the only thing that sets resolution
@@ -1148,10 +1261,13 @@ function opts() {
     lambda: lambdaOf(+$("lam").value),
     limit: Math.max(100, +$("limit").value || 10000),
     baseX: +$("baseX").value || 0,
+    baseZ: +$("baseZ").value || 0,
     baseY: +$("baseY").value || 0,
     lineHeight: +$("lineHeight").value || 1.59375,
     lineOffset: +$("lineOffset").value || 0,
     kerning: +$("kerning").value || 0,
+    overlapCm: $("overlap").checked ? Math.max(0, +$("overlapCm").value || 0) : 0,
+    overlapPct: $("overlap").checked ? Math.max(0, +$("overlapPct").value || 0) : 0,
     material: +$("material").value,
     materialSlider: Math.max(1, Math.min(10, +$("slider").value || 1)),
     graffitiDepth: clamp(+$("gDepth").value || 1, 1, 200),
@@ -1166,10 +1282,11 @@ function opts() {
 /* ---- loading */
 function loadFile(file) {
   if (!file || !file.type.startsWith("image/")) return;
-  state.name = file.name.replace(/\.[^.]+$/, "");
+  const named = (file.name || "").replace(/\.[^.]+$/, "") || "pasted";
+  state.name = named;
   createImageBitmap(file).then(bm => {
     state.bitmap = bm;
-    $("fileName").textContent = file.name + "  " + bm.width + "x" + bm.height;
+    $("fileName").textContent = (file.name || "pasted image") + "  " + bm.width + "x" + bm.height;
     $("drop").style.display = "none";
     $("stage").classList.add("on");
     state.raster = null; state.memo = {};
@@ -1197,6 +1314,21 @@ function pick() {
   if (ev === "dragleave" && e.relatedTarget) return;
   $("drop").classList.remove("hot");
 }));
+/* Anything pasted with an image on the clipboard loads it, wherever the focus
+   happens to be: pasting a picture into a number field does nothing useful
+   anyway, and only clipboards that actually carry one are intercepted. */
+document.addEventListener("paste", e => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.kind !== "file" || !String(item.type).startsWith("image/")) continue;
+    const file = item.getAsFile();
+    if (!file) continue;
+    e.preventDefault();
+    loadFile(file);
+    return;
+  }
+});
 document.addEventListener("drop", e => {
   e.preventDefault();
   const f = e.dataTransfer.files && e.dataTransfer.files[0];
@@ -1208,12 +1340,13 @@ $("clear").addEventListener("click", () => {
   $("stage").classList.remove("on");
   $("drop").style.display = "flex";
   $("save").disabled = true;
-  setMessage("", ""); note("msgScale", "");
+  setMessage("", ""); $("ppsWarn").hidden = true;
   ["sRes", "sStuds", "sBricks", "sChars", "sTags", "sErr", "sSide"].forEach(id => $(id).textContent = "-");
   showStrays(false);
 });
 
 /* ---- pipeline */
+const BUSY_ABOVE_MS = 400;      // below this the marker would only flicker
 let pending = null;
 function run() {
   clearTimeout(pending);
@@ -1253,20 +1386,40 @@ function doRun() {
   }
   state.data = data;
 
-  try {
-    state.result = convert(data, w, h, o, state.memo);
-    const n = state.result.outside;
-    setMessage(n
-      ? n + " of " + state.result.anchors.length + " anchor micros could not fit inside the picture and " +
-        "stick out past its edge. The text still lands correctly; only the invisible micros are outside. " +
-        "Lower pixels per stud, or make the picture bigger, to give them room."
-      : "", "warn");
-  } catch (err) {
-    state.result = null;
-    setMessage(err.message, "bad");
+  /* A slow run blocks everything, so put a marker up first and let the browser
+     paint one frame before starting. The estimate is last run's cost per pixel,
+     which adapts to the machine, and a run the memo will answer costs nothing.
+     No progress bar: the work is one call and slicing it would be a rewrite. */
+  const heavy = state.memo.key !== pixelKey(w, h, o) &&
+                w * h * state.perPixel > BUSY_ABOVE_MS;
+  const token = ++state.runToken;
+  if (!heavy) return finish();
+  $("busy").hidden = false;
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (token === state.runToken) finish();       // a newer run has taken over
+    $("busy").hidden = true;
+  }));
+
+  function finish() {
+    try {
+      const t0 = Date.now();
+      state.result = convert(data, w, h, o, state.memo);
+      const spent = Date.now() - t0;
+      if (spent > 40) state.perPixel = spent / (w * h);   // only a real run tells us much
+      const n = state.result.outside;
+      setMessage(n
+        ? n + " of " + state.result.anchors.length + " anchor micros could not fit inside the picture and " +
+          "stick out past its edge. The text still lands correctly; only the invisible micros are outside. " +
+          "Lower pixels per stud, or make the picture bigger, to give them room."
+        : "", "warn");
+    } catch (err) {
+      state.result = null;
+      setMessage(err.message, "bad");
+    }
+    paint();
+    stats();
+    $("busy").hidden = true;
   }
-  paint();
-  stats();
 }
 
 function stats() {
@@ -1274,13 +1427,14 @@ function stats() {
   $("sRes").textContent = state.w + " x " + state.h + " px";
   $("sStuds").textContent = fmt(state.w / o.pixelsPerStud) + " x " + fmt(state.h / o.pixelsPerStud) + " studs";
   if (!r) { ["sBricks", "sChars", "sTags", "sErr", "sSide"].forEach(id => $(id).textContent = "-");
-    showStrays(false); note("msgScale", ""); $("save").disabled = true; return; }
+    showStrays(false); $("ppsWarn").hidden = true; $("save").disabled = true; return; }
   const total = r.chunks.reduce((a, c) => a + c.len, 0);
   $("sBricks").textContent = r.chunks.length.toLocaleString();
   $("sChars").textContent = total.toLocaleString();
   $("sTags").textContent = r.tags.toLocaleString();
   $("sErr").textContent = r.rmse.toFixed(2) + " / " + r.maxErr.toFixed(2);
   checkTextSize(r, o);
+  showMetrics(r);
   $("sSide").textContent = r.outside;
   showStrays(r.outside > 0);
   $("save").disabled = false;
@@ -1300,16 +1454,20 @@ function note(id, text, kind) {
   box.firstChild.textContent = text;
 }
 
-/* Under a tenth of a centimetre the game draws the text fine, but deleting a
-   brick and undoing it leaves the display broken, so say so. */
+/* Under a tenth of a centimeter the game draws the text fine, but deleting a
+   brick and undoing it leaves the display broken. It rides on the field that
+   causes it rather than taking a message box of its own. */
 const MIN_TEXT_CM = 0.1;
 function checkTextSize(r, o) {
   const size = o.lineHeight * r.scale;
-  note("msgScale", size < MIN_TEXT_CM
-    ? "Text size is " + (Math.round(size * 10000) / 10000) + "cm, under the " + MIN_TEXT_CM +
-      "cm the game handles reliably. It draws correctly, but deleting a brick and undoing that " +
-      "breaks the display. Lower pixels per stud, or make the picture bigger."
-    : "", "warn");
+  const icon = $("ppsWarn");
+  icon.hidden = !(size < MIN_TEXT_CM);
+  // a title runs as wide as its longest line, so break it up by hand
+  icon.title = icon.hidden ? "" :
+    "Text size is " + (Math.round(size * 10000) / 10000) + "cm, under the " +
+    MIN_TEXT_CM + "cm\nthe game handles reliably.\n\n" +
+    "It draws correctly, but deleting a brick\nand undoing that breaks the display.\n\n" +
+    "Lower pixels per stud.";
 }
 
 /* ---- preview */
@@ -1509,11 +1667,11 @@ function showAlgo() {
 }
 function showTolLabel() {
   const t = toleranceOf(+$("tol").value);
-  $("tolOut").textContent = t ? "max dE " + t.toFixed(1) : "merges nothing";
+  $("tolOut").textContent = t ? "max dE " + t.toFixed(1) : "lossless";
 }
 function showLamLabel() {
   const l = lambdaOf(+$("lam").value);
-  $("lamOut").textContent = "penalty " + (l < 1 ? l.toFixed(2) : Math.round(l));
+  $("lamOut").textContent = "PELT penalty " + (l < 1 ? l.toFixed(2) : Math.round(l));
 }
 /* Plastic and unlit ignore the intensity, and the graffiti settings only mean
    anything to the graffiti material. */
@@ -1535,6 +1693,26 @@ $("alpha").addEventListener("input", showAlpha);
 $("algo").addEventListener("change", () => { showAlgo(); run(); });
 const showSlider = () => { showMaterial(); run(); };
 $("material").addEventListener("change", showSlider);
+$("overlap").addEventListener("change", () => { showOverlap(); run(); });
+/* Overlap moves all three of these, so each carries a readout of what was
+   actually written. The fields themselves stay the plain calibration and stay
+   editable. */
+const ACTUAL = { lineHeight: "lhActual", lineOffset: "loActual", kerning: "knActual" };
+function showOverlap() {
+  const on = $("overlap").checked;
+  for (const row of document.querySelectorAll(".row.overlapRow")) row.style.display = on ? "" : "none";
+  if (!on) for (const id of Object.keys(ACTUAL)) $(ACTUAL[id]).textContent = "";
+}
+showOverlap();
+
+// after each conversion the readouts catch up with the numbers just used
+function showMetrics(r) {
+  if (!$("overlap").checked || !r) return;
+  const shown = (v, n) => "actual: " + (+v.toFixed(n));
+  $(ACTUAL.lineHeight).textContent = shown(r.metrics.lineHeight, 5);
+  $(ACTUAL.lineOffset).textContent = shown(r.metrics.lineOffset, 4);
+  $(ACTUAL.kerning).textContent = shown(r.metrics.kerning, 4);
+}
 $("slider").addEventListener("input", showSlider);
 wheelable("slider", showSlider, 1);
 showMaterial();
@@ -1577,7 +1755,7 @@ wheelable("tol", showTol);
 wheelable("pps", applyPps, 1);
 wheelable("down", applyFactor, 1);
 ["smooth", "hex4", "limit", "baseX", "baseY", "lineHeight", "lineOffset", "kerning",
- "font", "showAnchors", "gDepth", "gAngle", "gLayer"].forEach(id => {
+ "font", "showAnchors", "gDepth", "gAngle", "gLayer", "overlapCm", "overlapPct", "baseZ"].forEach(id => {
   $(id).addEventListener("input", run);
   $(id).addEventListener("change", run);
 });
