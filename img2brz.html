@@ -35,13 +35,16 @@ h1 span{color:var(--accent)}
 .ver{font-size:10px; letter-spacing:.14em; color:var(--muted)}
 header p{margin:0; color:var(--muted); max-width:62ch}
 main{display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:22px; padding:22px; align-items:start}
-#work{grid-column:1; grid-row:1}
-#settings{grid-column:2; grid-row:1 / span 2}
-.notes{grid-column:1; grid-row:2; justify-self:start; width:fit-content; max-width:100%}
+/* the left column is its own stack rather than two grid rows: a grid item
+   spanning both rows hands its extra height to every row it spans, so
+   opening Advanced used to push the notes down with it */
+#left{display:flex; flex-direction:column; gap:16px; min-width:0}
+.notes{align-self:flex-start; width:fit-content; max-width:100%}
 @media (max-width:940px){
   main{grid-template-columns:minmax(0,1fr)}
-  /* stack in source order, so the notes land after the settings */
-  #work, #settings, .notes{grid-column:auto; grid-row:auto}
+  /* let the three panels stack directly, so the notes can be ordered last */
+  #left{display:contents}
+  #work{order:1} #settings{order:2} .notes{order:3}
 }
 .panel{background:var(--panel); border:1px solid var(--line); padding:14px}
 .panel + .panel{margin-top:16px}
@@ -97,7 +100,13 @@ dl.stats dd b{font-weight:600}
 .note.warn{border-color:var(--warn); background:var(--warn-soft)}
 .note.bad{border-color:var(--bad); background:#f7dedb}
 details{border-top:1px solid var(--line2); margin-top:12px; padding-top:8px}
+hr.split{border:0; border-top:1px solid var(--line2); margin:12px 0 8px}
 summary{cursor:pointer; font-family:var(--disp); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+summary h2{display:inline; border:0; padding:0; margin:0}
+.panel details{border-top:0; margin-top:0; padding-top:0}
+/* the rule goes on the summary, not the heading inside it: a block heading
+   drops below the disclosure marker instead of sitting beside it */
+.panel details[open] summary{margin-bottom:10px; border-bottom:1px solid var(--line2); padding-bottom:7px}
 .legend{display:flex; gap:12px; flex-wrap:wrap; color:var(--muted); font-size:11px; margin-top:8px}
 .swatch{display:inline-block; width:10px; height:10px; vertical-align:-1px; margin-right:4px; border:1px solid #0003}
 .notes p{margin:0 0 10px; max-width:78ch; color:var(--muted)}
@@ -115,7 +124,8 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
 </header>
 
 <main>
-  <section id="work">
+  <div id="left">
+    <section id="work">
     <div class="panel">
       <h2>Image</h2>
       <div id="drop" tabindex="0" role="button" aria-label="Choose an image">
@@ -132,6 +142,7 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
           <span id="zoomLabel" style="min-width:4ch;text-align:center">1x</span>
           <button class="ghost" id="zoomIn" aria-label="Zoom in">+</button>
           <button class="ghost" id="clear">Remove image</button>
+          <button class="ghost" id="orig" style="margin-left:auto" title="Hold S, or this button, to see the source image"><u>S</u>how original</button>
         </div>
         <div class="canvaswrap"><canvas id="preview"></canvas></div>
         <div class="bar"><span id="fileName" style="color:var(--muted)"></span></div>
@@ -142,6 +153,15 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
       </div>
     </div>
   </section>
+
+  <div class="panel notes">
+    <h2>How it works</h2>
+    <p>Width and height set how big the picture is drawn, not how many pixels it has: they change the text size and leave the resolution alone. Pixels per stud is the resampling control, and Reset puts it back to one output pixel per source pixel at the current width.</p>
+    <p>Text reads along world -X and stacks up +Z, so the picture hangs in the XZ plane on one Y. Anchors sit on a 2cm grid over the picture. The layout takes as many columns as it needs to fit one anchor per component in the rows available, and each anchor wants the row its text starts on, mapped across the whole picture height. Each takes the first cell of the row it wants, or the cell after the previous anchor when that row is already taken, so they stay spread over the picture instead of piling up wherever the detail is, and the first one always lands on the top left cell. Each carries the offset that puts its text back where it belongs. If a picture is too small to hold one micro per component they spill out, and the Output panel says how many.</p>
+    <p>Merging nudges each pixel onto its neighbors' color where the shift stays under the tolerance, in reading order and wrapping across rows exactly as the color tag does, which turns scattered near-identical pixels into one long run and one tag. The run re-centers itself on everything it has swallowed rather than sticking with the color it opened on, and nothing is ever moved further than the tolerance: 1 is around four steps of 8-bit gray and is hard to see, while 2 flattens film grain and faint texture. On a noisy photograph it typically cuts the character count by half or more.</p>
+    <p>Bricks sit on whole centimeters, so a picture whose size is not a whole number of them cannot be boxed exactly. Its top left corner is pinned to the grid and the leftover sliver, always under one centimeter, is left at the bottom right. The red brick starts in that corner, grows upward until something stops it, and if only the top edge did, grows leftward as well, so it ends up filling everything the anchors are not using.</p>
+  </div>
+  </div>
 
   <section id="settings">
     <div class="panel">
@@ -155,15 +175,19 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
         <input type="number" id="hStuds" min="0.2" step="0.2" value="20">
       </div>
       <div class="row">
-        <label for="lockAspect">Keep aspect ratio</label>
-        <input type="checkbox" id="lockAspect" checked>
+        <label for="down">Downsample factor <span class="hint" id="downOut">source pixels per output pixel</span></label>
+        <span style="display:flex; gap:6px">
+          <input type="number" id="down" min="1" step="1" value="1" style="width:76px">
+          <button class="ghost" id="downReset" title="Back to the image's own resolution">Reset</button>
+        </span>
       </div>
       <div class="row">
-        <label for="pps">Pixels per stud <span class="hint">lower it to resample the image</span></label>
-        <span style="display:flex; gap:6px">
-          <input type="number" id="pps" min="0.05" max="200" step="0.5" value="5" style="width:76px">
-          <button class="ghost" id="ppsReset" title="Back to the image's own resolution">Reset</button>
-        </span>
+        <label for="pps">Pixels per stud <span class="hint">the same resampling, in studs</span></label>
+        <input type="number" id="pps" min="1" step="1" value="5">
+      </div>
+      <div class="row">
+        <label for="lockAspect">Keep aspect ratio</label>
+        <input type="checkbox" id="lockAspect" checked>
       </div>
       <div class="row">
         <label for="smooth">Smooth resampling <span class="hint">off keeps hard pixel edges</span></label>
@@ -177,13 +201,14 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
         <label for="alpha">Transparent below alpha <span class="hint" id="alphaOut">128</span></label>
         <input type="range" id="alpha" min="0" max="255" value="128">
       </div>
-      <div class="row">
-        <label for="tol">Merge nearby colors <span class="hint" id="tolOut">1.0</span></label>
-        <input type="range" id="tol" min="0" max="5" step="0.1" value="1">
+      <!-- one of these shows at a time, whichever the merge algorithm uses -->
+      <div class="row" id="rowTol">
+        <label for="tol">Quality <span class="hint" id="tolOut">merges nothing</span></label>
+        <input type="range" id="tol" min="0" max="5" step="0.1" value="5">
       </div>
-      <div class="row">
-        <label for="hex4">Short color tags <span class="hint">4 bits per channel, 3 chars shorter</span></label>
-        <input type="checkbox" id="hex4">
+      <div class="row" id="rowLam">
+        <label for="lam">Quality <span class="hint" id="lamOut">penalty 0.1</span></label>
+        <input type="range" id="lam" min="0" max="100" step="1" value="100">
       </div>
     </div>
 
@@ -195,6 +220,7 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
         <dt>Text bricks</dt><dd id="sBricks">-</dd>
         <dt>Characters</dt><dd id="sChars">-</dd>
         <dt>Color tags</dt><dd id="sTags">-</dd>
+        <dt>RMSE / max dE</dt><dd id="sErr">-</dd>
         <dt id="sSideLabel">Bricks outside picture boundary</dt><dd id="sSide">-</dd>
       </dl>
       <div id="msg"></div>
@@ -216,17 +242,45 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
           <option value="1">Graffiti (needs a surface)</option>
         </select>
       </div>
-      <div class="row">
-        <label for="slider">Material intensity</label>
-        <input type="number" id="slider" min="0" max="10" step="1" value="10">
+      <div class="row" id="rowSlider">
+        <label for="slider">Material intensity <span class="hint" id="sliderOut">10</span></label>
+        <input type="range" id="slider" min="1" max="10" step="1" value="10">
       </div>
-      <div class="row">
-        <label for="showAnchors">Leave anchor micros visible <span class="hint">for debugging</span></label>
-        <input type="checkbox" id="showAnchors">
+      <div class="row graffiti">
+        <label for="gDepth">Depth limit <span class="hint">cm</span></label>
+        <input type="number" id="gDepth" min="1" max="200" step="0.5" value="5">
+      </div>
+      <div class="row graffiti">
+        <label for="gAngle">Angle limit <span class="hint">degrees</span></label>
+        <input type="number" id="gAngle" min="0" max="180" step="1" value="45">
+      </div>
+      <div class="row graffiti">
+        <label for="gLayer">Priority</label>
+        <input type="number" id="gLayer" min="0" max="255" step="1" value="0">
       </div>
 
+    </div>
+
+    <div class="panel">
       <details>
-        <summary>Calibration</summary>
+        <summary><h2>Advanced</h2></summary>
+        <div class="row">
+          <label for="algo">Merge algorithm</label>
+          <select id="algo" style="width:130px">
+            <option value="pelt" selected>PELT, least squares</option>
+            <option value="greedy">Greedy, max error</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="hex4">Short color tags <span class="hint">4 bits per channel, usually a loss</span></label>
+          <input type="checkbox" id="hex4">
+        </div>
+        <div class="row">
+          <label for="showAnchors">Leave anchor micros visible <span class="hint">for debugging</span></label>
+          <input type="checkbox" id="showAnchors">
+        </div>
+
+        <hr class="split">
         <div class="row">
           <label for="font">Font asset</label>
           <input type="text" class="wide" id="font" value="GlacialIndifferencePlus">
@@ -240,6 +294,10 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
           <input type="number" id="lineOffset" step="0.1" value="-6">
         </div>
         <div class="row">
+          <label for="kerning">Letter spacing <span class="hint">kerning; 0 keeps one pixel per glyph</span></label>
+          <input type="number" id="kerning" step="0.01" value="0">
+        </div>
+        <div class="row">
           <label for="baseY">Base Y offset at 1x <span class="hint">scales with pixel size</span></label>
           <input type="number" id="baseY" step="0.0001" value="-0.2297">
         </div>
@@ -248,31 +306,13 @@ kbd{font-family:var(--mono); background:#fff; border:1px solid var(--line); padd
           <input type="number" id="baseX" step="0.01" value="0">
         </div>
         <div class="row">
-          <label for="kerning">Kerning</label>
-          <input type="number" id="kerning" step="0.01" value="0">
-        </div>
-        <div class="row">
           <label for="limit">Characters per component</label>
           <input type="number" id="limit" min="100" max="10000" step="100" value="10000">
-        </div>
-        <div class="row">
-          <label for="stepMode">Crowded anchors step <span class="hint">which way they look for room</span></label>
-          <select id="stepMode" style="width:130px">
-            <option value="right" selected>Right along the row</option>
-            <option value="down">Down the column</option>
-          </select>
         </div>
       </details>
     </div>
   </section>
 
-  <div class="panel notes">
-    <h2>How it works</h2>
-    <p>Width and height set how big the picture is drawn, not how many pixels it has: they change the text size and leave the resolution alone. Pixels per stud is the resampling control, and Reset puts it back to one output pixel per source pixel at the current width.</p>
-    <p>Text reads along world -X and stacks up +Z, so the picture hangs in the XZ plane on one Y. Anchors sit at the left edge of the row their text starts on, which keeps both offsets near zero, and they never leave the picture's own rectangle: bottom rows are pulled up, crowded ones look for the nearest free 2cm slot, and every one of them carries the offset that puts its text back where it belongs. If a picture is too small to hold one micro per component they spill out, and the Output panel says how many.</p>
-    <p>Merging nudges each pixel onto its neighbors' color where the shift stays under the tolerance, in reading order and wrapping across rows exactly as the color tag does, which turns scattered near-identical pixels into one long run and one tag. The run re-centers itself on everything it has swallowed rather than sticking with the color it opened on, and nothing is ever moved further than the tolerance: 1 is around four steps of 8-bit gray and is hard to see, while 2 flattens film grain and faint texture. On a noisy photograph it typically cuts the character count by half or more.</p>
-    <p>Bricks sit on whole centimeters, so a picture whose size is not a whole number of them cannot be boxed exactly. Its top left corner is pinned to the grid and the leftover sliver, always under one centimeter, is left at the bottom right. The red brick starts in that corner, grows upward until something stops it, and if only the top edge did, grows leftward as well, so it ends up filling everything the anchors are not using.</p>
-  </div>
 </main>
 
 
@@ -287,8 +327,15 @@ const STUD_CM = 10;
 function hex6(r, g, b) {
   return ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
 }
+/* Expects colors already on the 12-bit grid, which is what snap4 returns.
+   Rounding here instead would silently undo the perceptual snap, so it
+   complains rather than guessing. */
 function hex3(r, g, b) {
-  const q = v => Math.round(v / 17).toString(16);
+  const q = v => {
+    const n = v / 17;
+    if (n !== (n | 0)) throw new Error("hex3 needs a 12-bit color, got " + v);
+    return n.toString(16);
+  };
   return q(r) + q(g) + q(b);
 }
 
@@ -345,13 +392,13 @@ function build4() {
     LAB4[k] = t[0]; LAB4[k + 1] = t[1]; LAB4[k + 2] = t[2];
   }
 }
-const PIX4 = [0, 0, 0];
+const PIX4 = [0, 0, 0], LAB_SCRATCH = [0, 0, 0];
 
 /* Nearest 12-bit color to a target already in OKLab, searching the cell
    around the rgb given. Callers that hold the target's OKLab pass it in and
-   save the conversion. */
-const PAINT_LAB = [0, 0, 0];   // OKLab of whatever oklabToRgb last returned
-function snap4Lab(L, A, B, r, g, b, o) {
+   save the conversion, and pass `labOut` to receive the chosen color's own
+   OKLab, which the table already holds. */
+function snap4Lab(L, A, B, r, g, b, o, labOut) {
   if (!LAB4) build4();
   const cr = Math.round(r / 17), cg = Math.round(g / 17), cb = Math.round(b / 17);
   let br = cr, bg = cg, bb = cb, best = Infinity;
@@ -368,8 +415,10 @@ function snap4Lab(L, A, B, r, g, b, o) {
       }
     }
   }
-  const k = ((br * 16 + bg) * 16 + bb) * 3;
-  PAINT_LAB[0] = LAB4[k]; PAINT_LAB[1] = LAB4[k + 1]; PAINT_LAB[2] = LAB4[k + 2];
+  if (labOut) {
+    const k = ((br * 16 + bg) * 16 + bb) * 3;
+    labOut[0] = LAB4[k]; labOut[1] = LAB4[k + 1]; labOut[2] = LAB4[k + 2];
+  }
   o[0] = br * 17; o[1] = bg * 17; o[2] = bb * 17;
   return o;
 }
@@ -382,13 +431,13 @@ function snap4(r, g, b, o) {
     return o;
   }
   oklab(r, g, b, PIX4);
-  snap4Lab(PIX4[0], PIX4[1], PIX4[2], r, g, b, o);
+  snap4Lab(PIX4[0], PIX4[1], PIX4[2], r, g, b, o, null);
   SNAP_KEY[slot] = key;
   SNAP_VAL[slot] = (o[0] << 16) | (o[1] << 8) | o[2];
   return o;
 }
 
-function oklabToRgb(L, A, B, short, o) {
+function oklabToRgb(L, A, B, short, o, labOut) {
   const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
   const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
   const s = (L - 0.0894841775 * A - 1.2914855480 * B) ** 3;
@@ -397,8 +446,8 @@ function oklabToRgb(L, A, B, short, o) {
   o[1] = back(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s);
   o[2] = back(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s);
   // the target is already in OKLab here, so no round trip is needed
-  if (short) return snap4Lab(L, A, B, o[0], o[1], o[2], o);
-  oklab(o[0], o[1], o[2], PAINT_LAB);
+  if (short) return snap4Lab(L, A, B, o[0], o[1], o[2], o, labOut);
+  if (labOut) oklab(o[0], o[1], o[2], labOut);
   return o;
 }
 
@@ -409,45 +458,115 @@ function oklabToRgb(L, A, B, short, o) {
    way the color tag does, and it paints one color. A pixel joins if the
    color the run would then paint stays within `tolerance` of every color
    already in it, so no pixel is ever moved further than the tolerance and the
-   run keeps re-centring itself as it goes, which fits gradients far better
+   run keeps re-centering itself as it goes, which fits gradients far better
    than sticking with the color it opened on.
 
    The membership test uses the corners of the run's OKLab bounding box: every
    member sits inside that box, so bounding the corners bounds the members.
    Transparent pixels neither join nor break a run, since they draw nothing
    and the color tag carries across them. Trailing transparent pixels on a
-   row are dropped: they cost characters and change nothing. */
-function readCells(data, w, h, alphaThreshold, short, tolerance) {
+   row are dropped: they cost characters and change nothing.
+
+   Pixels come back as indices into a palette of tag strings, in one flat
+   typed array. A string reference per pixel is four bytes either way on paper
+   but costs far more in practice once a picture runs to millions of them.
+   Two runs that paint the same color share an index when they are adjacent,
+   which is the only case where it changes what the encoder emits, since any
+   run in between resets the tag anyway. */
+/* Shared by both merge algorithms: turns a stretch of the reading order into
+   one painted color, records what the tag was, and keeps the error tally. */
+function makePainter(data, w, alphaThreshold, short, cells, palette, shown) {
   const hex = short ? hex3 : hex6;
-  const T = Math.max(0, tolerance || 0) / 100;
-  const cells = new Array(h);
-  for (let y = 0; y < h; y++) cells[y] = new Array(w);
+  const src = [0, 0, 0], plab = [0, 0, 0];
+  let sumSq = 0, worst = 0, seen = 0;
+  return {
+    // from and to are raw pixel indices; transparent ones are skipped
+    paint(from, to, r, g, b) {
+      const tag = hex(r, g, b);
+      let idx = palette.length - 1;
+      if (idx < 0 || palette[idx] !== tag) { idx = palette.length; palette.push(tag); }
+      oklab(r, g, b, plab);
+      for (let i = from; i < to; i++) {
+        if (data[i * 4 + 3] < alphaThreshold) continue;
+        cells[i] = idx;
+        shown[i * 4] = r; shown[i * 4 + 1] = g; shown[i * 4 + 2] = b; shown[i * 4 + 3] = 255;
+        oklab(data[i * 4], data[i * 4 + 1], data[i * 4 + 2], src);
+        const a = src[0] - plab[0], b2 = src[1] - plab[1], c = src[2] - plab[2];
+        const e = a * a + b2 * b2 + c * c;
+        sumSq += e; if (e > worst) worst = e; seen++;
+      }
+    },
+    stats() {
+      return { rmse: Math.sqrt(sumSq / Math.max(1, seen)) * 100, maxErr: Math.sqrt(worst) * 100 };
+    },
+  };
+}
+
+/* Read RGBA bytes into per-pixel color tags, merging neighbours into runs of
+   one color while doing it.
+
+   A run is a stretch of the reading order, wrapping across rows exactly the
+   way the color tag does, and it paints one color. Transparent pixels neither
+   join nor break a run, since they draw nothing and the tag carries across
+   them. Trailing transparent pixels on a row are dropped: they cost
+   characters and change nothing.
+
+   Pixels come back as indices into a palette of tag strings, in one flat
+   typed array. Two runs that paint the same color share an index when they
+   are adjacent, which is the only case where it changes what the encoder
+   emits, since any run in between resets the tag anyway. */
+function readCells(data, w, h, o) {
+  const { alphaThreshold, short, algorithm } = o;
+  const cells = new Int32Array(w * h).fill(-1);   // -1 is transparent
+  const palette = [];
   const rowEnd = new Int32Array(h);
   const shown = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    let end = 0;
+    for (let x = 0; x < w; x++) if (data[(y * w + x) * 4 + 3] >= alphaThreshold) end = x + 1;
+    rowEnd[y] = end;
+  }
+  const painter = makePainter(data, w, alphaThreshold, short, cells, palette, shown);
+  const runs = algorithm === "pelt"
+    ? mergePelt(data, w, h, o, painter)
+    : mergeGreedy(data, w, h, o, painter);
+  return Object.assign({ cells, palette, rowEnd, shown, runs }, painter.stats());
+}
+
+/* Greedy: grow a run until the color it would paint no longer sits within the
+   tolerance of every color already in it, so no pixel is ever moved further
+   than the tolerance. The run re-picks its color as it goes, which fits
+   gradients far better than sticking with the one it opened on.
+
+   The membership test uses the corners of the run's OKLab bounding box: every
+   member sits inside that box, so bounding the corners bounds the members.
+   That is a worst-case rule on where runs break; the color a run paints is
+   its average, which minimises the squared error of its members. */
+function mergeGreedy(data, w, h, o, painter) {
+  const { alphaThreshold, short, tolerance } = o;
+  const T = Math.max(0, tolerance || 0) / 100;
 
   // scratch, reused for every pixel: allocating here dominated the loop
-  const pix = [0, 0, 0], cand = [0, 0, 0];
+  const pix = [0, 0, 0], cand = [0, 0, 0], paintLab = [0, 0, 0], last = [0, 0, 0];
   const lo = [0, 0, 0], hi = [0, 0, 0], nlo = [0, 0, 0], nhi = [0, 0, 0], paint = [0, 0, 0];
-  let open = false, tag = null, runStart = 0, lastPacked = -1, runs = 0;
+  const mid = [0, 0, 0];
+  let sumL = 0, sumA = 0, sumB = 0, count = 0;
+  let open = false, runStart = 0, lastPacked = -1, runs = 0;
 
   const commit = end => {
     if (!open) return;
-    for (let i = runStart; i < end; i++) {
-      if (data[i * 4 + 3] < alphaThreshold) continue;
-      const y = (i / w) | 0;
-      cells[y][i - y * w] = tag;
-      shown[i * 4] = paint[0]; shown[i * 4 + 1] = paint[1];
-      shown[i * 4 + 2] = paint[2]; shown[i * 4 + 3] = 255;
-    }
+    painter.paint(runStart, end, paint[0], paint[1], paint[2]);
     runs++;
     open = false;
   };
 
   /* The color a run covering this box would paint, and how far that color
-     sits from the furthest corner. */
-  const fit = (blo, bhi, out) => {
-    oklabToRgb((blo[0] + bhi[0]) / 2, (blo[1] + bhi[1]) / 2, (blo[2] + bhi[2]) / 2, short, out);
-    const paintLab = PAINT_LAB;   // filled in by the conversion above
+     sits from the furthest corner. The candidate is the average of the
+     members, which is what minimises their squared error; the corner check
+     still bounds every member by the tolerance. */
+  const fit = (blo, bhi, out, mL, mA, mB, n) => {
+    mid[0] = mL / n; mid[1] = mA / n; mid[2] = mB / n;
+    oklabToRgb(mid[0], mid[1], mid[2], short, out, paintLab);
     let worst = 0;
     for (let k = 0; k < 8; k++) {
       const a = (k & 1 ? bhi : blo)[0] - paintLab[0];
@@ -460,21 +579,25 @@ function readCells(data, w, h, alphaThreshold, short, tolerance) {
   };
 
   for (let y = 0; y < h; y++) {
-    let end = 0;
     for (let x = 0; x < w; x++) {
       const i = y * w + x, j = i * 4;
-      if (data[j + 3] < alphaThreshold) { cells[y][x] = null; continue; }
-      end = x + 1;
+      if (data[j + 3] < alphaThreshold) continue;   // cells already reads -1
       const r = data[j], g = data[j + 1], b = data[j + 2];
       const packed = (r << 16) | (g << 8) | b;
-      if (open && packed === lastPacked) continue;   // same as the pixel before it
+      if (open && packed === lastPacked) {
+        // identical to the pixel before it, so the box cannot move, but the
+        // average still has to count it
+        sumL += last[0]; sumA += last[1]; sumB += last[2]; count++;
+        continue;
+      }
       lastPacked = packed;
 
       if (T > 0) {
         oklab(r, g, b, pix);
+        last[0] = pix[0]; last[1] = pix[1]; last[2] = pix[2];
         if (open) {
-          if (pix[0] >= lo[0] && pix[0] <= hi[0] && pix[1] >= lo[1] &&
-              pix[1] <= hi[1] && pix[2] >= lo[2] && pix[2] <= hi[2]) continue;   // nothing changes
+          // no fast path for a pixel already inside the box: it still moves
+          // the average, so the color has to be re-picked and re-checked
           let dx = 0, ok = true;
           for (let k = 0; k < 3; k++) {
             nlo[k] = pix[k] < lo[k] ? pix[k] : lo[k];
@@ -484,36 +607,122 @@ function readCells(data, w, h, alphaThreshold, short, tolerance) {
           // no color can beat half the box diagonal, so reject hopeless
           // boxes before paying for the inverse transform
           if (Math.sqrt(dx) / 2 > T) ok = false;
-          if (ok && fit(nlo, nhi, cand) <= T) {
+          if (ok && fit(nlo, nhi, cand, sumL + pix[0], sumA + pix[1], sumB + pix[2], count + 1) <= T) {
             for (let k = 0; k < 3; k++) { lo[k] = nlo[k]; hi[k] = nhi[k]; paint[k] = cand[k]; }
-            tag = hex(paint[0], paint[1], paint[2]);
+            sumL += pix[0]; sumA += pix[1]; sumB += pix[2]; count++;
             continue;
           }
           commit(i);
         }
         for (let k = 0; k < 3; k++) { lo[k] = pix[k]; hi[k] = pix[k]; }
+        sumL = pix[0]; sumA = pix[1]; sumB = pix[2]; count = 1;
       } else if (open) commit(i);
 
       if (short) snap4(r, g, b, paint);
       else { paint[0] = r; paint[1] = g; paint[2] = b; }
-      tag = hex(paint[0], paint[1], paint[2]);
       open = true;
       runStart = i;
     }
-    rowEnd[y] = end;
   }
   commit(w * h);
-  return { cells, rowEnd, shown, runs };
+  return runs;
+}
+
+/* PELT: exact least-squares segmentation of the reading order, trading total
+   squared error against one penalty per run. Segment cost comes from prefix
+   sums, so any candidate split is O(1):
+
+     SSE(s,t) = sum|p|^2 - |sum p|^2 / n
+
+   Candidates that can never beat the current best are pruned, which keeps it
+   near linear on real pictures. There is no bound on how far one pixel may
+   move, unlike the greedy rule; the penalty only controls the total. */
+const PELT_MAX_CANDIDATES = 4096;
+function mergePelt(data, w, h, o, painter) {
+  const { alphaThreshold, short, lambda } = o;
+  const total = w * h;
+
+  // gather the opaque pixels and their prefix sums in one pass
+  let n = 0;
+  for (let i = 0; i < total; i++) if (data[i * 4 + 3] >= alphaThreshold) n++;
+  if (!n) return 0;
+  const at = new Int32Array(n);
+  const pL = new Float64Array(n + 1), pA = new Float64Array(n + 1);
+  const pB = new Float64Array(n + 1), pQ = new Float64Array(n + 1);
+  const lab = [0, 0, 0];
+  let k = 0;
+  for (let i = 0; i < total; i++) {
+    if (data[i * 4 + 3] < alphaThreshold) continue;
+    oklab(data[i * 4], data[i * 4 + 1], data[i * 4 + 2], lab);
+    at[k] = i;
+    pL[k + 1] = pL[k] + lab[0];
+    pA[k + 1] = pA[k] + lab[1];
+    pB[k + 1] = pB[k] + lab[2];
+    pQ[k + 1] = pQ[k] + lab[0] * lab[0] + lab[1] * lab[1] + lab[2] * lab[2];
+    k++;
+  }
+  const cost = (s, t) => {
+    const m = t - s;
+    const dl = pL[t] - pL[s], da = pA[t] - pA[s], db = pB[t] - pB[s];
+    const v = (pQ[t] - pQ[s]) - (dl * dl + da * da + db * db) / m;
+    return v > 0 ? v : 0;      // clamp the float dust on a constant run
+  };
+
+  // lambda is quoted in the same units as the sliders, so square and rescale
+  const pen = Math.max(0, lambda) / 1e4;
+  const F = new Float64Array(n + 1), back = new Int32Array(n + 1);
+  const cands = new Int32Array(PELT_MAX_CANDIDATES + 1);
+  let nc = 1; cands[0] = 0;
+  let capped = 0;
+
+  for (let t = 1; t <= n; t++) {
+    let best = Infinity, bestS = 0;
+    for (let c = 0; c < nc; c++) {
+      const s = cands[c];
+      const v = F[s] + cost(s, t) + pen;
+      if (v < best) { best = v; bestS = s; }
+    }
+    F[t] = best; back[t] = bestS;
+    let keep = 0;
+    for (let c = 0; c < nc; c++) {
+      const s = cands[c];
+      if (F[s] + cost(s, t) <= best) cands[keep++] = s;   // K is 0 for squared error
+    }
+    if (keep >= PELT_MAX_CANDIDATES) {                    // safety valve
+      cands.copyWithin(0, keep - PELT_MAX_CANDIDATES + 1, keep);
+      keep = PELT_MAX_CANDIDATES - 1;
+      capped++;
+    }
+    cands[keep++] = t;
+    nc = keep;
+  }
+  if (capped) console.warn("PELT candidate cap hit on " + capped + " of " + n + " positions");
+
+  // walk the splits back, then paint each segment
+  const cuts = [];
+  for (let t = n; t > 0; t = back[t]) cuts.push(t);
+  cuts.push(0);
+  cuts.reverse();
+  // each segment paints its average, which minimises the squared error of
+  // its members; the nearest representable color to that average is then
+  // what oklabToRgb picks
+  const out = [0, 0, 0];
+  for (let c = 0; c + 1 < cuts.length; c++) {
+    const s = cuts[c], t = cuts[c + 1], m = t - s;
+    oklabToRgb((pL[t] - pL[s]) / m, (pA[t] - pA[s]) / m, (pB[t] - pB[s]) / m, short, out, null);
+    painter.paint(at[s], t < n ? at[t] : total, out[0], out[1], out[2]);
+  }
+  return cuts.length - 1;
 }
 
 /* Greedy pack into components. A color tag and the pixel it applies to are
    one indivisible unit, so a split never lands inside a tag or orphans one.
    Color is sticky within a component and resets at every boundary. */
-function encode(cells, rowEnd, w, h, limit, short) {
+function encode(cells, palette, rowEnd, w, h, limit, short) {
   const tagLen = short ? 13 : 16;             // <color="rgb"> or <color="rrggbb">
   const worst = tagLen + 1;
   const chunks = [];
-  let ch = null;
+  let ch = null, tags = 0;
 
   const open = (row, col) => {
     if (col + worst > limit) {
@@ -523,8 +732,8 @@ function encode(cells, rowEnd, w, h, limit, short) {
         (limit - worst) + " pixels; this one is " + w + ". Lower pixels per stud to resample it smaller."
       );
     }
-    ch = { startRow: row, startCol: col, endRow: row, endCol: col, parts: [], len: 0, color: null };
-    if (col > 0) { ch.parts.push(EM.repeat(col)); ch.len = col; }
+    ch = { startRow: row, startCol: col, endRow: row, endCol: col, text: "", len: 0, color: -1 };
+    if (col > 0) { ch.text = EM.repeat(col); ch.len = col; }
     chunks.push(ch);
     return ch;
   };
@@ -535,33 +744,32 @@ function encode(cells, rowEnd, w, h, limit, short) {
   for (let y = 0; y < h; y++) {
     if (!freshRow) {
       if (ch.len + 1 > limit) { open(y, 0); freshRow = true; }
-      else { ch.parts.push(BR); ch.len += 1; }
+      else { ch.text += BR; ch.len += 1; }
     }
-    const row = cells[y];
+    const base = y * w;
     const end = rowEnd[y];
     let x = 0;
     while (x < end) {
-      const c = row[x];
+      const c = cells[base + x];
       let piece, cost;
-      if (c === null) { piece = EM; cost = 1; }
+      if (c < 0) { piece = EM; cost = 1; }
       else if (c === ch.color) { piece = BLOCK; cost = 1; }
-      else { piece = '<color="' + c + '">' + BLOCK; cost = tagLen + 1; }
+      else { piece = '<color="' + palette[c] + '">' + BLOCK; cost = tagLen + 1; }
       if (ch.len + cost > limit) { open(y, x); freshRow = true; continue; }
-      ch.parts.push(piece);
+      ch.text += piece;
       ch.len += cost;
-      if (c !== null) ch.color = c;
+      if (c >= 0 && c !== ch.color) { ch.color = c; tags++; }
       x++;
     }
     ch.endRow = y; ch.endCol = end;
     freshRow = false;
   }
 
-  for (const c of chunks) { c.text = c.parts.join(""); delete c.parts; }
-  return chunks;
+  return { chunks, tags };
 }
 
 /* Text right runs along world -X, up along world +Z. */
-const VERSION = "1.4.12";
+const VERSION = "1.8.4";
 const RIGHT_X = -1;
 
 /* The client that wrote the reference clipboards. Cosmetic, but brs-js's
@@ -577,56 +785,82 @@ const GAME_VERSION = "CL15526";
    belongs to.
 
    In-plane coordinates: u runs right along the text, v runs up. */
-function planAnchors(chunks, opts) {
-  const { w, h, px, baseX, baseY, planeY, stepMode } = opts;
-  /* Bricks live on whole centimeters, so a picture whose size is not a whole
-     number of them cannot be covered exactly. Pin its top left corner to the
-     grid, which puts the leftover sliver at the bottom right, next to the
-     corner marker, rather than under the anchors. */
-  const u0 = -Math.ceil(w * px), v0 = Math.ceil(h * px);
+/* One anchor micro per component, laid out on a 2cm grid over the picture.
 
-  // a micro is 2cm across, so its center has to keep one cm clear of each edge
-  const uLo = u0 + MICRO_HALF, uHi = u0 + w * px - MICRO_HALF;
-  const vLo = v0 - h * px + MICRO_HALF, vHi = v0 - MICRO_HALF;
-  const xLo = -uHi, xHi = -uLo;                       // world X of the center
-  const box = {
-    xMin: Math.ceil(xLo - 1e-9), xMax: Math.floor(xHi + 1e-9),
-    zMin: Math.ceil(vLo - 1e-9), zMax: Math.floor(vHi + 1e-9),
-  };
+   The old rule put each anchor where its own text starts and shoved it aside
+   when that cell was taken, which piled anchors up wherever chunks were
+   densest and left the last rows trailing far to the right. This one decides
+   the shape first: enough columns for every anchor to fit in the rows the
+   picture has, then each anchor's wanted row comes from mapping its start row
+   across the whole picture height onto those rows.
+
+   Placing them is one forward pass over two positions per anchor. Its seat is
+   where it would sit if every anchor were packed against the bottom right,
+   filling right to left and bottom to top. Its wanted cell is the first
+   column of the row it asks for. Each anchor takes the earlier of the two,
+   never before the anchor ahead of it, so a crowd wanting one row fills that
+   row from the left and spills down, but only as far as its seat.
+
+   The seat is what keeps the picture evenly covered. Without it a dense band
+   cascades downward until the surplus falls off the bottom edge; with it the
+   bottom rows stay packed and the overflow spreads back up. The first anchor
+   still lands on the top left cell: its text starts there and nothing
+   precedes it.
+
+   Wherever it lands, its offset is measured from there, so the text still
+   draws on the pixel it belongs to. */
+function planAnchors(chunks, opts) {
+  const { w, h, px, baseX, baseY, planeY } = opts;
+
+  /* Bricks are 2cm cubes and the game places them best on a 2cm grid, so the
+     box they cover is a whole number of them, floored rather than rounded up.
+     The picture's top left corner is pinned to that box's, which leaves the
+     picture spilling past the bottom and right edges by under 2cm rather than
+     leaving a strip of the box empty. Everything the layout needs, the anchor
+     cells and the marker alike, then lands on one grid. */
+  const boxW = 2 * Math.max(1, Math.floor(w * px / 2));
+  const boxH = 2 * Math.max(1, Math.floor(h * px / 2));
+  const u0 = -boxW, v0 = boxH;
+
+  // cell centers sit a centimeter inside each edge of the box
+  const box = { xMin: MICRO_HALF, xMax: boxW - MICRO_HALF,
+                zMin: MICRO_HALF, zMax: boxH - MICRO_HALF };
   const roomy = box.xMin <= box.xMax && box.zMin <= box.zMax;
 
-  // right is -X, down is -Z; stepping prefers one of them and falls back to the other
-  const along = stepMode === "down" ? { x: 0, z: -1 } : { x: -1, z: 0 };
-  const across = stepMode === "down" ? { x: -1, z: 0 } : { x: 0, z: -1 };
+  const rows = boxH / 2, colsFit = boxW / 2;
+  const n = chunks.length;
+  const cols = Math.min(colsFit, Math.max(1, Math.ceil(n / rows)));
 
   const taken = new Set();
   const out = [];
-  let stepped = 0, outside = 0;
+  let outside = 0;
 
-  for (const c of chunks) {
-    const xWant = Math.round(-(u0 + MICRO_HALF));
-    const zWant = Math.round(v0 - c.startRow * px - MICRO_HALF);
-    const spot = findSpot(taken, xWant, zWant, roomy ? box : null, along, across);
-    const { x, z } = spot;
+  const cells = rows * cols;
+  let prev = -1;
+  for (let i = 0; i < n; i++) {
+    const c = chunks[i];
+    const want = rows <= 1 ? 0
+      : Math.min(rows - 1, Math.round((c.startRow / h) * (rows - 1)));
+    const seat = Math.max(i, cells - n + i);          // packed against the end
+    const at = Math.min(Math.max(want * cols, prev + 1), seat);
+    prev = at;
+    const r = (at / cols) | 0, col = at - r * cols;
+    const x = 2 * col + MICRO_HALF;                   // right runs along +X
+    const z = v0 - 2 * r - MICRO_HALF;
     taken.add(x + "," + z);
-    if (spot.moved) stepped++;
-    if (x < xLo - 1e-9 || x > xHi + 1e-9 || z < vLo - 1e-9 || z > vHi + 1e-9) outside++;
+    if (x < box.xMin || x > box.xMax || z < box.zMin || z > box.zMax) outside++;
 
-    // where the text has to start, and where this brick's top left corner is
-    const uText = u0, vText = v0 - c.startRow * px;
-    const uBrick = -x - MICRO_HALF;
-    const vBrick = z + MICRO_HALF;
-
+    /* Where the text has to start against where this brick's top left corner
+       is. Both sit on the grid, so these come out exact. */
     out.push({
       position: [x, planeY, z],
       offset: {
-        X: round4(uText - uBrick + baseX),
-        Y: round4(vText - vBrick + baseY),
+        X: round4(-2 * col + baseX),
+        Y: round4(2 * r - c.startRow * px + baseY),
         Z: 0,
       },
       chunk: c,
-      moved: spot.moved,
-      cell: [(-x - u0) / px, (v0 - z) / px],   // where it sits in image pixels
+      cell: [(2 * col + MICRO_HALF) / px, (2 * r + MICRO_HALF) / px],   // in image pixels
     });
   }
 
@@ -638,10 +872,10 @@ function planAnchors(chunks, opts) {
      the center and half extents whole. Skipped when the picture has no room
      for it or an anchor already sits there. */
   let corner = null;
-  if (roomy && free(taken, box.xMin, box.zMin)) {
-    let x0 = box.xMin - MICRO_HALF, x1 = box.xMin + MICRO_HALF;
+  if (roomy && free(taken, box.xMax, box.zMin)) {
+    let x0 = box.xMax - MICRO_HALF, x1 = box.xMax + MICRO_HALF;
     let z0 = box.zMin - MICRO_HALF, z1 = box.zMin + MICRO_HALF;
-    const zTop = box.zMax + MICRO_HALF, xLeft = box.xMax + MICRO_HALF;
+    const zTop = box.zMax + MICRO_HALF, xLeft = box.xMin - MICRO_HALF;
     const clear = (ax0, ax1, az0, az1) => !out.some(a =>
       a.position[0] >= ax0 && a.position[0] <= ax1 &&
       a.position[2] >= az0 && a.position[2] <= az1);
@@ -653,10 +887,10 @@ function planAnchors(chunks, opts) {
       z1 += 2;
     }
     if (toppedOut) {
-      while (x1 + 2 <= xLeft && clear(x1, x1 + 2, z0, z1)) x1 += 2;
+      while (x0 - 2 >= xLeft && clear(x0 - 2, x0, z0, z1)) x0 -= 2;
     }
 
-    taken.add(box.xMin + "," + box.zMin);
+    taken.add(box.xMax + "," + box.zMin);
     corner = {
       position: [(x0 + x1) / 2, planeY, (z0 + z1) / 2],
       size: [(x1 - x0) / 2, MICRO_HALF, (z1 - z0) / 2],
@@ -674,37 +908,7 @@ function planAnchors(chunks, opts) {
     if (corner) { corner.position[0] += dx; corner.position[2] += dz; }
   }
 
-  return { anchors: out, stepped, outside, corner };
-}
-
-/* Nearest free cell to (x, z): the spot itself, then out along the preferred
-   axis in both directions, then a row across, and so on. Cells outside `box`
-   are skipped while there is any hope of staying inside it. */
-function findSpot(taken, x, z, box, along, across) {
-  if (box) {
-    x = Math.min(box.xMax, Math.max(box.xMin, x));
-    z = Math.min(box.zMax, Math.max(box.zMin, z));
-    const spanA = Math.abs(along.x) ? box.xMax - box.xMin : box.zMax - box.zMin;
-    const spanB = Math.abs(across.x) ? box.xMax - box.xMin : box.zMax - box.zMin;
-    for (let b = 0; b <= spanB; b++) {
-      for (const bs of b === 0 ? [0] : [b, -b]) {
-        for (let a = 0; a <= spanA; a++) {
-          for (const as of a === 0 ? [0] : [a, -a]) {
-            const cx = x + along.x * as + across.x * bs;
-            const cz = z + along.z * as + across.z * bs;
-            if (cx < box.xMin || cx > box.xMax || cz < box.zMin || cz > box.zMax) continue;
-            if (free(taken, cx, cz)) return { x: cx, z: cz, moved: as !== 0 || bs !== 0 };
-          }
-        }
-      }
-    }
-  }
-  // the picture is too small or too crowded to hold them all, so spill out of it
-  for (let a = 0; ; a++) {
-    const cx = x + along.x * a, cz = z + along.z * a;
-    if (free(taken, cx, cz)) return { x: cx, z: cz, moved: a !== 0 };
-    if (a > 1e5) throw new Error("Could not find a free cell for an anchor micro.");
-  }
+  return { anchors: out, outside, corner, cols, rows };
 }
 
 /* Micros are 2cm cubes, so two of them clash whenever their centers are
@@ -727,6 +931,7 @@ function buildSave(anchors, opts) {
   const {
     scale, font, lineHeight, lineOffset, kerning, material, materialSlider,
     visibleAnchors, name, corner,
+    graffitiDepth, graffitiAngle, graffitiLayer,
   } = opts;
 
   const bricks = anchors.map(a => ({
@@ -734,7 +939,7 @@ function buildSave(anchors, opts) {
     size: [MICRO_HALF, MICRO_HALF, MICRO_HALF],
     position: a.position,
     direction: 4,       // brick up is world +Z
-    rotation: 1,        // matches the calibrated clipboard
+    rotation: 3,        // the calibrated clipboard turned to read along +X
     collision: visibleAnchors
       ? { player: true, weapon: true, interaction: true, tool: true, physics: true }
       : { player: false, weapon: false, interaction: false, tool: false, physics: false },
@@ -761,9 +966,9 @@ function buildSave(anchors, opts) {
         OutlineColor: { R: 0, G: 0, B: 0, A: 255 },
         OutlineWidth: 2,
         ScuffWidth: 0,
-        GraffitiDepthLimit: 5,
-        GraffitiAngleLimit: 45,
-        GraffitiLayer: 0,
+        GraffitiDepthLimit: graffitiDepth,
+        GraffitiAngleLimit: graffitiAngle,
+        GraffitiLayer: graffitiLayer,
         bEnabled: true,
         Face: 1,          // the face the calibrated clipboard draws on
         bAlignToWedge: false,
@@ -868,26 +1073,28 @@ function convert(data, w, h, o, memo) {
 
   /* Reading and packing the pixels is the slow half and only a few settings
      touch it, so hand in a memo object and changing a material stays instant. */
-  const key = [w, h, o.alphaThreshold, o.short, o.tolerance, o.limit].join("/");
-  let shown, runs, chunks;
+  // every setting the pixel stage reads has to appear here, or flipping one
+  // silently hands back the previous result
+  const key = [w, h, o.alphaThreshold, o.short, o.tolerance, o.limit,
+               o.algorithm, o.lambda].join("/");
+  let shown, tags, chunks, rmse, maxErr, runs;
   if (memo && memo.key === key && memo.data === data) {
-    ({ shown, runs, chunks } = memo);
+    ({ shown, tags, chunks, rmse, maxErr, runs } = memo);
   } else {
-    const read = readCells(data, w, h, o.alphaThreshold, o.short, o.tolerance);
-    shown = read.shown; runs = read.runs;
-    chunks = encode(read.cells, read.rowEnd, w, h, o.limit, o.short);
-    if (memo) Object.assign(memo, { key, data, shown, runs, chunks });
+    const read = readCells(data, w, h, o);
+    shown = read.shown; rmse = read.rmse; maxErr = read.maxErr; runs = read.runs;
+    ({ chunks, tags } = encode(read.cells, read.palette, read.rowEnd, w, h, o.limit, o.short));
+    if (memo) Object.assign(memo, { key, data, shown, tags, chunks, rmse, maxErr, runs });
   }
-  const { anchors, stepped, outside, corner } = planAnchors(chunks, {
+  const { anchors, outside, corner, cols, rows } = planAnchors(chunks, {
     w, h, px,
-    stepMode: o.stepMode,
     baseX: o.baseX,
     baseY: o.baseY * scale,   // the calibration nudge scales with the text
     planeY: 0,
   });
   const built = buildSave(anchors, Object.assign({ scale, corner }, o));
-  return { chunks, anchors, stepped, outside, corner, shown, runs, px, scale,
-           save: built.save, write: built.write };
+  return { chunks, anchors, outside, corner, cols, rows, shown, tags, rmse, maxErr, runs,
+           px, scale, save: built.save, write: built.write };
 }
 
 if (typeof module !== "undefined") {
@@ -899,7 +1106,9 @@ if (typeof module !== "undefined") {
 const $ = id => document.getElementById(id);
 const state = {
   bitmap: null, name: "image", data: null, w: 0, h: 0,
-  result: null, zoom: 1, mode: "pixels", error: null,
+  result: null, zoom: 1, mode: "pixels", showOriginal: false,
+  raster: null,    // {key, data} so a component tweak does not re-rasterise
+  memo: {},        // convert's cache of the pixel stage
   pps: 5,          // pixels per stud, the only thing that sets resolution
   resW: 0, resH: 0 // the resolution those settings currently ask for
 };
@@ -917,8 +1126,10 @@ function studsIn(id) {
   const v = parseFloat($(id).value);
   return Number.isFinite(v) && v > 0 ? v : null;
 }
+/* No ceiling here: width and height are authoritative, so a small picture cut
+   from a large image needs whatever density that works out to. */
 function setPps(v) {
-  state.pps = Math.min(200, Math.max(0.05, v));
+  state.pps = Math.max(1e-4, v);
   $("pps").value = +state.pps.toFixed(4);
 }
 function showStuds() {   // the fields always follow from resolution and density
@@ -926,21 +1137,26 @@ function showStuds() {   // the fields always follow from resolution and density
   $("hStuds").value = +(state.resH / state.pps).toFixed(2);
 }
 
+const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
 function opts() {
   return {
     pixelsPerStud: state.pps,
     alphaThreshold: +$("alpha").value,
     short: $("hex4").checked,
-    tolerance: +$("tol").value,
+    tolerance: toleranceOf(+$("tol").value),
+    algorithm: $("algo").value,
+    lambda: lambdaOf(+$("lam").value),
     limit: Math.max(100, +$("limit").value || 10000),
-    stepMode: $("stepMode").value,
     baseX: +$("baseX").value || 0,
     baseY: +$("baseY").value || 0,
     lineHeight: +$("lineHeight").value || 1.59375,
     lineOffset: +$("lineOffset").value || 0,
     kerning: +$("kerning").value || 0,
     material: +$("material").value,
-    materialSlider: Math.max(0, Math.min(10, +$("slider").value || 0)),
+    materialSlider: Math.max(1, Math.min(10, +$("slider").value || 1)),
+    graffitiDepth: clamp(+$("gDepth").value || 1, 1, 200),
+    graffitiAngle: clamp(+$("gAngle").value || 0, 0, 180),
+    graffitiLayer: Math.round(clamp(+$("gLayer").value || 0, 0, 255)),
     font: $("font").value.trim() || "GlacialIndifferencePlus",
     visibleAnchors: $("showAnchors").checked,
     name: state.name,
@@ -956,9 +1172,11 @@ function loadFile(file) {
     $("fileName").textContent = file.name + "  " + bm.width + "x" + bm.height;
     $("drop").style.display = "none";
     $("stage").classList.add("on");
+    state.raster = null; state.memo = {};
     state.resW = bm.width; state.resH = bm.height;
     setPps(5);                                        // five pixels to the stud
     showStuds();
+    showFactor();
     state.zoom = 1;
     run();
   }).catch(() => setMessage("That file did not decode as an image.", "bad"));
@@ -986,11 +1204,12 @@ document.addEventListener("drop", e => {
 });
 $("clear").addEventListener("click", () => {
   state.bitmap = null; state.result = null;
+  state.data = null; state.raster = null; state.memo = {};
   $("stage").classList.remove("on");
   $("drop").style.display = "flex";
   $("save").disabled = true;
   setMessage("", ""); note("msgScale", "");
-  ["sRes", "sStuds", "sBricks", "sChars", "sTags", "sSide"].forEach(id => $(id).textContent = "-");
+  ["sRes", "sStuds", "sBricks", "sChars", "sTags", "sErr", "sSide"].forEach(id => $(id).textContent = "-");
   showStrays(false);
 });
 
@@ -1005,29 +1224,45 @@ function doRun() {
   if (!state.bitmap) return;
   const o = opts();
   const w = Math.max(1, state.resW), h = Math.max(1, state.resH);
-  if (w * h > 6e6) { setMessage("That is over six million pixels. Shrink it before converting.", "bad"); return; }
+  state.w = w; state.h = h;
+  if (w * h > 6e6) {
+    // drop the old result rather than leaving it on screen and saveable
+    state.result = null; state.data = null; state.raster = null;
+    const cv = $("preview"); cv.width = 0; cv.height = 0;
+    setMessage("That is over six million pixels. Shrink it before converting.", "bad");
+    stats();
+    return;
+  }
 
-  const c = document.createElement("canvas");
-  c.width = w; c.height = h;
-  const ctx = c.getContext("2d", { willReadFrequently: true });
-  ctx.imageSmoothingEnabled = $("smooth").checked;
-  ctx.imageSmoothingQuality = "high";
-  ctx.clearRect(0, 0, w, h);
-  ctx.drawImage(state.bitmap, 0, 0, w, h);
-  const img = ctx.getImageData(0, 0, w, h);
-  state.data = img.data; state.w = w; state.h = h;
+  /* Rasterising is only worth redoing when the size or the filter changed, and
+     handing convert the same array is also what lets it reuse the pixel
+     stage when only a component setting moved. */
+  const rkey = w + "/" + h + "/" + ($("smooth").checked ? 1 : 0);
+  let data;
+  if (state.raster && state.raster.key === rkey) data = state.raster.data;
+  else {
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = $("smooth").checked;
+    ctx.imageSmoothingQuality = "high";
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(state.bitmap, 0, 0, w, h);
+    data = ctx.getImageData(0, 0, w, h).data;
+    state.raster = { key: rkey, data };
+  }
+  state.data = data;
 
   try {
-    state.result = convert(img.data, w, h, o);
-    state.error = null;
+    state.result = convert(data, w, h, o, state.memo);
     const n = state.result.outside;
     setMessage(n
       ? n + " of " + state.result.anchors.length + " anchor micros could not fit inside the picture and " +
         "stick out past its edge. The text still lands correctly; only the invisible micros are outside. " +
-        "Raise pixels per stud, or make the picture bigger, to give them room."
+        "Lower pixels per stud, or make the picture bigger, to give them room."
       : "", "warn");
   } catch (err) {
-    state.result = null; state.error = err;
+    state.result = null;
     setMessage(err.message, "bad");
   }
   paint();
@@ -1038,12 +1273,13 @@ function stats() {
   const r = state.result, o = opts();
   $("sRes").textContent = state.w + " x " + state.h + " px";
   $("sStuds").textContent = fmt(state.w / o.pixelsPerStud) + " x " + fmt(state.h / o.pixelsPerStud) + " studs";
-  if (!r) { ["sBricks", "sChars", "sTags", "sSide"].forEach(id => $(id).textContent = "-");
+  if (!r) { ["sBricks", "sChars", "sTags", "sErr", "sSide"].forEach(id => $(id).textContent = "-");
     showStrays(false); note("msgScale", ""); $("save").disabled = true; return; }
   const total = r.chunks.reduce((a, c) => a + c.len, 0);
   $("sBricks").textContent = r.chunks.length.toLocaleString();
   $("sChars").textContent = total.toLocaleString();
-  $("sTags").textContent = r.runs.toLocaleString();
+  $("sTags").textContent = r.tags.toLocaleString();
+  $("sErr").textContent = r.rmse.toFixed(2) + " / " + r.maxErr.toFixed(2);
   checkTextSize(r, o);
   $("sSide").textContent = r.outside;
   showStrays(r.outside > 0);
@@ -1078,11 +1314,21 @@ function checkTextSize(r, o) {
 
 /* ---- preview */
 function paint() {
+  if (!state.data) return;      // nothing rasterised, e.g. the size was refused
   const cv = $("preview"), w = state.w, h = state.h;
   const z = state.zoom;
   cv.width = w * z; cv.height = h * z;
   const ctx = cv.getContext("2d");
   ctx.imageSmoothingEnabled = false;
+
+  /* Held down, the source goes up at the same size for comparison. No
+     overlays over it: it is the thing being compared against. */
+  if (state.showOriginal && state.bitmap) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(state.bitmap, 0, 0, cv.width, cv.height);
+    return;
+  }
 
   const src = document.createElement("canvas");
   src.width = w; src.height = h;
@@ -1119,6 +1365,44 @@ function paint() {
   for (const a of state.result.anchors) {
     ctx.fillRect(a.cell[0] * z - 1, a.cell[1] * z - 1, Math.max(2, z), Math.max(2, z));
   }
+}
+
+/* A hold, not a toggle: it shows the source only while it is held. */
+{
+  const btn = $("orig");
+  const hold = on => { if (state.showOriginal === on) return; state.showOriginal = on; paint(); };
+  /* Focus it explicitly rather than swallowing the pointerdown: preventing
+     that default is what stops a button taking focus, and without focus its
+     key handlers never run and space just scrolls the page. */
+  btn.addEventListener("pointerdown", () => { btn.focus(); hold(true); });
+  btn.addEventListener("keydown", e => {
+    // stops space scrolling the page and enter synthesising a click
+    if (e.key === " " || e.key === "Enter") { e.preventDefault(); hold(true); }
+  });
+  ["pointerup", "pointercancel", "pointerleave", "keyup", "blur"]
+    .forEach(ev => btn.addEventListener(ev, () => hold(false)));
+
+  /* S anywhere on the page does the same, so the source can be flicked in and
+     out while a slider is being dragged. Sliders and checkboxes keep working
+     as the key's target; only somewhere text is being entered swallows it. */
+  const TEXT_ENTRY = /^(text|number|search|email|url|tel|password)$/;
+  const typing = el => {
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    const tag = (el.tagName || "").toLowerCase();
+    if (tag === "textarea" || tag === "select") return true;
+    return tag === "input" && TEXT_ENTRY.test((el.type || "text").toLowerCase());
+  };
+  const isS = e => (e.key === "s" || e.key === "S") && !e.ctrlKey && !e.metaKey && !e.altKey;
+  document.addEventListener("keydown", e => {
+    if (!isS(e) || typing(e.target)) return;
+    e.preventDefault();
+    hold(true);
+  });
+  document.addEventListener("keyup", e => { if (isS(e)) hold(false); });
+  // released off the button, or the window lost focus mid-hold
+  window.addEventListener("pointerup", () => state.showOriginal && hold(false));
+  window.addEventListener("blur", () => state.showOriginal && hold(false));
 }
 
 $("mPix").addEventListener("click", () => setMode("pixels"));
@@ -1160,28 +1444,104 @@ $("hStuds").addEventListener("input", () => {
 }));
 $("lockAspect").addEventListener("change", () => { if (state.bitmap) { showStuds(); run(); } });
 
+/* The two resampling fields are one number seen twice. The factor counts
+   source pixels per output pixel across the width; the density says the same
+   thing in studs. Editing either recomputes the resolution and refreshes the
+   other, and neither is ever rewritten while it has focus, or erasing a digit
+   from "1.2" would drop the point too and cut the edit short.
+
+   Upscaling is pointless here, since drawing the same pixels larger is free,
+   so neither field goes past the source resolution. Width and height are
+   untouched by both: they hold the pixel count fixed, which is why they never
+   move the factor. */
+const showFactor = () =>
+  $("down").value = +(state.bitmap ? state.bitmap.width / state.resW : 1).toFixed(3);
+
 function applyPps() {
-  const v = parseFloat($("pps").value), w = studsIn("wStuds"), h = studsIn("hStuds");
-  if (!Number.isFinite(v) || v <= 0 || w === null || h === null) return;
-  setPps(v);
+  const v = parseFloat($("pps").value);
+  if (!Number.isFinite(v) || v <= 0) return;
+  // fall back to the size the state already holds if a field is mid-edit
+  const w = studsIn("wStuds") ?? state.resW / state.pps;
+  const h = studsIn("hStuds") ?? state.resH / state.pps;
+  const ceiling = state.bitmap ? state.bitmap.width / w : Infinity;   // factor 1
+  state.pps = Math.min(Math.max(v, 1), ceiling);
   state.resW = Math.max(1, Math.round(w * state.pps));
   state.resH = Math.max(1, Math.round(h * state.pps));
+  showFactor();
+  run();
+}
+function applyFactor() {
+  const k = parseFloat($("down").value);
+  if (!Number.isFinite(k) || k <= 0 || !state.bitmap) return;
+  const w = studsIn("wStuds") ?? state.resW / state.pps;
+  /* Take the ratio from the source while the aspect is locked: reading it
+     back off already-rounded pixel counts loses a row on the return trip. */
+  const stretch = locked() ? state.bitmap.height / state.bitmap.width
+                           : state.resH / state.resW;
+  state.resW = Math.max(1, Math.round(state.bitmap.width / Math.max(1, k)));
+  state.resH = Math.max(1, Math.round(state.resW * stretch));
+  setPps(state.resW / w);
   run();
 }
 $("pps").addEventListener("input", applyPps);
-$("ppsReset").addEventListener("click", () => {
+$("down").addEventListener("input", applyFactor);
+// on blur or enter each field catches up with whatever the state settled on
+$("pps").addEventListener("change", () => { $("pps").value = +state.pps.toFixed(4); });
+$("down").addEventListener("change", showFactor);
+$("downReset").addEventListener("click", () => {
   if (!state.bitmap) return;
-  const w = studsIn("wStuds") || state.resW / state.pps;
-  const h = studsIn("hStuds") || state.resH / state.pps;
-  setPps(state.bitmap.width / w);                    // one output pixel per source pixel
-  state.resW = state.bitmap.width;
-  state.resH = locked() ? state.bitmap.height : Math.max(1, Math.round(h * state.pps));
-  showStuds();
-  run();
+  $("down").value = 1;
+  applyFactor();
 });
+/* Both sliders run worst to best from left to right, so each one is read
+   backwards from the parameter it drives. The penalty spans four decades and
+   is logarithmic; it is quoted in the tolerance's units squared, per pixel
+   per run, so at 100 a new tag is worth opening if it saves a hundred pixels
+   a dE of 1. */
+const toleranceOf = q => Math.round((5 - q) * 10) / 10;
+const lambdaOf = q => Math.pow(10, (100 - q) / 20 - 1);
+function showAlgo() {
+  const pelt = $("algo").value === "pelt";
+  $("rowTol").style.display = pelt ? "none" : "";
+  $("rowLam").style.display = pelt ? "" : "none";
+  showTolLabel();
+  showLamLabel();
+}
+function showTolLabel() {
+  const t = toleranceOf(+$("tol").value);
+  $("tolOut").textContent = t ? "max dE " + t.toFixed(1) : "merges nothing";
+}
+function showLamLabel() {
+  const l = lambdaOf(+$("lam").value);
+  $("lamOut").textContent = "penalty " + (l < 1 ? l.toFixed(2) : Math.round(l));
+}
+/* Plastic and unlit ignore the intensity, and the graffiti settings only mean
+   anything to the graffiti material. */
+const FLAT_MATERIALS = [0, 2];   // unlit, plastic
+const GRAFFITI = 1;
+function showMaterial() {
+  const m = +$("material").value;
+  const flat = FLAT_MATERIALS.indexOf(m) >= 0;
+  $("slider").disabled = flat;
+  $("rowSlider").style.opacity = flat ? 0.4 : 1;
+  $("sliderOut").textContent = $("slider").value;
+  for (const el of document.querySelectorAll(".row.graffiti")) {
+    el.style.display = m === GRAFFITI ? "" : "none";
+  }
+}
 const showAlpha = () => { $("alphaOut").textContent = $("alpha").value; run(); };
-const showTol = () => { $("tolOut").textContent = (+$("tol").value).toFixed(1); run(); };
+const showTol = () => { showTolLabel(); run(); };
 $("alpha").addEventListener("input", showAlpha);
+$("algo").addEventListener("change", () => { showAlgo(); run(); });
+const showSlider = () => { showMaterial(); run(); };
+$("material").addEventListener("change", showSlider);
+$("slider").addEventListener("input", showSlider);
+wheelable("slider", showSlider, 1);
+showMaterial();
+const showLam = () => { showLamLabel(); run(); };
+$("lam").addEventListener("input", showLam);
+wheelable("lam", showLam, 1);
+showAlgo();
 $("tol").addEventListener("input", showTol);
 
 /* Wheel over a slider nudges it by `grain`, holding shift for ten of those.
@@ -1191,9 +1551,17 @@ $("tol").addEventListener("input", showTol);
 function wheelable(id, after, grain) {
   const el = $(id);
   const g = grain || +el.step || 1;
+  // an absent min or max reads as "", and +"" is 0, which would clamp every
+  // step to zero; a missing bound has to mean no bound
+  const bound = (raw, fallback) => {
+    const v = parseFloat(raw);
+    return Number.isFinite(v) ? v : fallback;
+  };
   el.addEventListener("wheel", e => {
     e.preventDefault();
-    const min = +el.min, max = +el.max, v = +el.value, n = e.shiftKey ? 10 : 1;
+    const min = bound(el.min, -Infinity), max = bound(el.max, Infinity);
+    const v = bound(el.value, min === -Infinity ? 0 : min);
+    const n = e.shiftKey ? 10 : 1;
     // step to the nth grid point in that direction, so an off-grid value
     // lands on the grid rather than staying off it
     const at = v / g;
@@ -1207,8 +1575,9 @@ function wheelable(id, after, grain) {
 wheelable("alpha", showAlpha, 16);
 wheelable("tol", showTol);
 wheelable("pps", applyPps, 1);
-["smooth", "hex4", "limit", "stepMode", "baseX", "baseY", "lineHeight", "lineOffset", "kerning",
- "material", "slider", "font", "showAnchors"].forEach(id => {
+wheelable("down", applyFactor, 1);
+["smooth", "hex4", "limit", "baseX", "baseY", "lineHeight", "lineOffset", "kerning",
+ "font", "showAnchors", "gDepth", "gAngle", "gLayer"].forEach(id => {
   $(id).addEventListener("input", run);
   $(id).addEventListener("change", run);
 });
