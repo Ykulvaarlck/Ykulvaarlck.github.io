@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+
+<!-- ==================== version ==================== -->
+<script>var IMG2BRZ_VERSION = "1.12.6";</script>
+<!-- ================================================= -->
+
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>img2brz - image to Brickadia text display</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -290,8 +295,8 @@ certain angles, but otherwise the image dimensions would be exact.">?</span>
         </select>
       </div>
       <div class="row" id="rowSlider">
-        <label for="slider">Material intensity <span class="hint" id="sliderOut">10</span></label>
-        <input type="range" id="slider" min="1" max="10" step="1" value="10">
+        <label for="slider">Material intensity <span class="hint" id="sliderOut">1</span></label>
+        <input type="range" id="slider" min="1" max="10" step="1" value="1">
       </div>
       <div class="row child graffiti">
         <label for="gDepth">Depth limit <span class="hint">cm</span></label>
@@ -834,7 +839,9 @@ function encode(cells, palette, rowEnd, w, h, limit, short) {
 }
 
 /* Text right runs along world -X, up along world +Z. */
-const VERSION = "1.12.2";
+/* Set once at the top of the file. Outside a browser, where that script has
+   not run, this reads as "dev". */
+const VERSION = typeof IMG2BRZ_VERSION === "string" ? IMG2BRZ_VERSION : "dev";
 
 /* Glyph metrics, fitted to the calibration. The block glyph is drawn
    LineHeight * 2/1.59375 across, and one unit of Kerning or LineSpacing moves
@@ -1218,6 +1225,7 @@ const $ = id => document.getElementById(id);
 const state = {
   bitmap: null, name: "image", data: null, w: 0, h: 0,
   result: null, zoom: 1, mode: "pixels", showOriginal: false,
+  factor: 1,       // the downsample asked for, which rounding may not grant exactly
   perPixel: 3e-3,  // ms per pixel, replaced by the first real measurement
   runToken: 0,
   raster: null,    // {key, data} so a component tweak does not re-rasterise
@@ -1291,6 +1299,7 @@ function loadFile(file) {
     $("stage").classList.add("on");
     state.raster = null; state.memo = {};
     state.resW = bm.width; state.resH = bm.height;
+    state.factor = 1;
     setPps(5);                                        // five pixels to the stud
     showStuds();
     showFactor();
@@ -1612,8 +1621,19 @@ $("lockAspect").addEventListener("change", () => { if (state.bitmap) { showStuds
    so neither field goes past the source resolution. Width and height are
    untouched by both: they hold the pixel count fixed, which is why they never
    move the factor. */
-const showFactor = () =>
-  $("down").value = +(state.bitmap ? state.bitmap.width / state.resW : 1).toFixed(3);
+/* The factor asked for is kept as asked for. Reading it back off the pixel
+   count would rewrite it to whatever the rounding produced, so on a 117 wide
+   image a typed 2 resamples to 59 and comes back as 1.983, and an integer
+   factor becomes untypable. The hint carries the effective one when the
+   source does not divide evenly. */
+const effectiveFactor = () => state.bitmap ? state.bitmap.width / state.resW : 1;
+function showFactor() {
+  $("down").value = +state.factor.toFixed(3);
+  const real = effectiveFactor();
+  $("downOut").textContent = Math.abs(real - state.factor) < 5e-4
+    ? "source pixels per output pixel"
+    : "source pixels per output pixel, " + (+real.toFixed(3)) + " after rounding";
+}
 
 function applyPps() {
   const v = parseFloat($("pps").value);
@@ -1625,6 +1645,7 @@ function applyPps() {
   state.pps = Math.min(Math.max(v, 1), ceiling);
   state.resW = Math.max(1, Math.round(w * state.pps));
   state.resH = Math.max(1, Math.round(h * state.pps));
+  state.factor = effectiveFactor();      // the density chose it, so it is what it is
   showFactor();
   run();
 }
@@ -1636,7 +1657,8 @@ function applyFactor() {
      back off already-rounded pixel counts loses a row on the return trip. */
   const stretch = locked() ? state.bitmap.height / state.bitmap.width
                            : state.resH / state.resW;
-  state.resW = Math.max(1, Math.round(state.bitmap.width / Math.max(1, k)));
+  state.factor = Math.max(1, k);
+  state.resW = Math.max(1, Math.round(state.bitmap.width / state.factor));
   state.resH = Math.max(1, Math.round(state.resW * stretch));
   setPps(state.resW / w);
   run();
@@ -1722,11 +1744,13 @@ wheelable("lam", showLam, 1);
 showAlgo();
 $("tol").addEventListener("input", showTol);
 
-/* Wheel over a slider nudges it by `grain`, holding shift for ten of those.
-   Values land on the grain's own grid, except at the very ends, which stay
-   reachable. The listener has to be non-passive to keep the page from
-   scrolling under it. */
-function wheelable(id, after, grain) {
+/* Wheel over a field nudges it by `grain`, holding shift for ten of those and
+   ctrl for `fine` where a field has one, which also gives it the ctrl-arrow
+   keys. Values land on the grid of whichever step is in play, except at the
+   very ends, which stay reachable. The wheel listener has to be non-passive,
+   both to keep the page from scrolling under it and to stop ctrl-wheel
+   zooming the page. */
+function wheelable(id, after, grain, fine) {
   const el = $(id);
   const g = grain || +el.step || 1;
   // an absent min or max reads as "", and +"" is 0, which would clamp every
@@ -1735,25 +1759,33 @@ function wheelable(id, after, grain) {
     const v = parseFloat(raw);
     return Number.isFinite(v) ? v : fallback;
   };
-  el.addEventListener("wheel", e => {
-    e.preventDefault();
+  const move = (up, e) => {
     const min = bound(el.min, -Infinity), max = bound(el.max, Infinity);
     const v = bound(el.value, min === -Infinity ? 0 : min);
+    const step = fine && (e.ctrlKey || e.metaKey) ? fine : g;
     const n = e.shiftKey ? 10 : 1;
     // step to the nth grid point in that direction, so an off-grid value
     // lands on the grid rather than staying off it
-    const at = v / g;
-    const raw = e.deltaY < 0 ? (Math.floor(at + 1e-9) + n) * g : (Math.ceil(at - 1e-9) - n) * g;
+    const at = v / step;
+    const raw = up ? (Math.floor(at + 1e-9) + n) * step : (Math.ceil(at - 1e-9) - n) * step;
     const next = +Math.min(max, Math.max(min, raw)).toFixed(6);
     if (next === v) return;
     el.value = next;
     after();
-  }, { passive: false });
+  };
+  el.addEventListener("wheel", e => { e.preventDefault(); move(e.deltaY < 0, e); }, { passive: false });
+  el.addEventListener("keydown", e => {
+    // the browser's own arrow stepping already covers the coarse case
+    if (!fine || !(e.ctrlKey || e.metaKey)) return;
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    e.preventDefault();
+    move(e.key === "ArrowUp", e);
+  });
 }
 wheelable("alpha", showAlpha, 16);
 wheelable("tol", showTol);
-wheelable("pps", applyPps, 1);
-wheelable("down", applyFactor, 1);
+wheelable("pps", applyPps, 1, 0.01);
+wheelable("down", applyFactor, 1, 0.01);
 ["smooth", "hex4", "limit", "baseX", "baseY", "lineHeight", "lineOffset", "kerning",
  "font", "showAnchors", "gDepth", "gAngle", "gLayer", "overlapCm", "overlapPct", "baseZ"].forEach(id => {
   $(id).addEventListener("input", run);
